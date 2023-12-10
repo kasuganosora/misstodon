@@ -14,6 +14,7 @@ func Router(e *echo.Group) {
 	group := e.Group("/.well-known", middleware.CORS())
 	group.GET("/nodeinfo", NodeInfoHandler)
 	group.GET("/webfinger", WebFingerHandler)
+	group.GET("/host-meta", HostMeta)
 }
 
 func NodeInfoHandler(c echo.Context) error {
@@ -40,4 +41,8 @@ func WebFingerHandler(c echo.Context) error {
 		})
 	}
 	return misskey.WebFinger(c.Get("proxy-server").(string), resource, c.Response().Writer)
+}
+
+func HostMeta(c echo.Context) error {
+	return misskey.HostMeta(c.Get("proxy-server").(string), c.Response().Writer)
 }
