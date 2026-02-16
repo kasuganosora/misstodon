@@ -13,3 +13,4 @@ proxy/misskey/.env
 /internal/mfm/out.js
 misskey
 mastodon
+misstodon.exe
