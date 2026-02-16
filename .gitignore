@@ -11,6 +11,6 @@ node_modules/
 /.env
 proxy/misskey/.env
 /internal/mfm/out.js
-misskey
-mastodon
+/misskey
+/mastodon
 misstodon.exe
