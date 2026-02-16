@@ -43,7 +43,7 @@ var SupportedMimeTypes = []string{
 	"audio/vnd.wave",
 }
 
-func Instance(server, version string) (models.Instance, error) {
+func Instance(server, version, proxyHost string) (models.Instance, error) {
 	var info models.Instance
 	var serverInfo models.MkMeta
 	resp, err := client.R().
@@ -62,8 +62,12 @@ func Instance(server, version string) (models.Instance, error) {
 	if resp.StatusCode() != http.StatusOK {
 		return info, errors.New("Failed to get instance info")
 	}
+	domain := serverUrl.Host
+	if proxyHost != "" {
+		domain = proxyHost
+	}
 	info = models.Instance{
-		Uri:              serverUrl.Host,
+		Uri:              domain,
 		Title:            serverInfo.Name,
 		Description:      serverInfo.Description,
 		ShortDescription: serverInfo.Description,
@@ -118,9 +122,6 @@ func InstanceCustomEmojis(server string) ([]models.CustomEmoji, error) {
 		Post(utils.JoinURL(server, "/api/emojis"))
 	if err != nil {
 		return nil, err
-	}
-	if err != nil {
-		return nil, errors.WithStack(err)
 	}
 	if err = isucceed(resp, http.StatusOK); err != nil {
 		return nil, errors.WithStack(err)

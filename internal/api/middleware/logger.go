@@ -1,25 +1,33 @@
 package middleware
 
 import (
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"time"
+
+	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
-var Logger = middleware.RequestLoggerWithConfig(
-	middleware.RequestLoggerConfig{
-		LogMethod:  true,
-		LogURI:     true,
-		LogStatus:  true,
-		LogLatency: true,
-		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			log.Info().
-				Str("proxy-server", c.Get("proxy-server").(string)).
-				Str("method", v.Method).
-				Str("uri", v.URI).
-				Int("status", v.Status).
-				Str("latency", v.Latency.String()).
-				Msg("Request")
-			return nil
-		},
-	})
+func Logger(c *gin.Context) {
+	start := time.Now()
+	path := c.Request.URL.Path
+	raw := c.Request.URL.RawQuery
+
+	c.Next()
+
+	latency := time.Since(start)
+	status := c.Writer.Status()
+	method := c.Request.Method
+	proxyServer, _ := c.Get("proxy-server")
+
+	if raw != "" {
+		path = path + "?" + raw
+	}
+
+	log.Info().
+		Str("proxy-server", proxyServer.(string)).
+		Str("method", method).
+		Str("uri", path).
+		Int("status", status).
+		Str("latency", latency.String()).
+		Msg("Request")
+}

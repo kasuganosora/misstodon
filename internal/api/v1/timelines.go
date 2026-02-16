@@ -4,67 +4,71 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gin-gonic/gin"
+	"github.com/gizmo-ds/misstodon/internal/api/httperror"
 	"github.com/gizmo-ds/misstodon/internal/misstodon"
 	"github.com/gizmo-ds/misstodon/internal/utils"
 	"github.com/gizmo-ds/misstodon/models"
 	"github.com/gizmo-ds/misstodon/proxy/misskey"
-	"github.com/labstack/echo/v4"
 )
 
-func TimelinesRouter(e *echo.Group) {
-	group := e.Group("/timelines")
+func TimelinesRouter(r *gin.RouterGroup) {
+	group := r.Group("/timelines")
 	group.GET("/public", TimelinePublicHandler)
 	group.GET("/home", TimelineHomeHandler)
 	group.GET("/tag/:hashtag", TimelineHashtag)
 }
 
-func TimelinePublicHandler(c echo.Context) error {
-	ctx, _ := misstodon.ContextWithEchoContext(c)
+func TimelinePublicHandler(c *gin.Context) {
+	ctx, _ := misstodon.ContextWithGinContext(c)
 	limit := 20
-	if v, err := strconv.Atoi(c.QueryParam("limit")); err == nil {
+	if v, err := strconv.Atoi(c.Query("limit")); err == nil {
 		limit = v
 		if limit > 40 {
 			limit = 40
 		}
 	}
 	timelineType := models.TimelinePublicTypeRemote
-	if c.QueryParam("local") == "true" {
+	if c.Query("local") == "true" {
 		timelineType = models.TimelinePublicTypeLocal
 	}
 	list, err := misskey.TimelinePublic(ctx,
-		timelineType, c.QueryParam("only_media") == "true", limit,
-		c.QueryParam("max_id"), c.QueryParam("min_id"))
+		timelineType, c.Query("only_media") == "true", limit,
+		c.Query("max_id"), c.Query("min_id"))
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, utils.SliceIfNull(list))
+	c.JSON(http.StatusOK, utils.SliceIfNull(list))
 }
 
-func TimelineHomeHandler(c echo.Context) error {
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+func TimelineHomeHandler(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 	limit := 20
-	if v, err := strconv.Atoi(c.QueryParam("limit")); err == nil {
+	if v, err := strconv.Atoi(c.Query("limit")); err == nil {
 		limit = v
 		if limit > 40 {
 			limit = 40
 		}
 	}
 	list, err := misskey.TimelineHome(ctx,
-		limit, c.QueryParam("max_id"), c.QueryParam("min_id"))
+		limit, c.Query("max_id"), c.Query("min_id"))
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, utils.SliceIfNull(list))
+	c.JSON(http.StatusOK, utils.SliceIfNull(list))
 }
 
-func TimelineHashtag(c echo.Context) error {
-	ctx, _ := misstodon.ContextWithEchoContext(c)
+func TimelineHashtag(c *gin.Context) {
+	ctx, _ := misstodon.ContextWithGinContext(c)
 
 	limit := 20
-	if v, err := strconv.Atoi(c.QueryParam("limit")); err == nil {
+	if v, err := strconv.Atoi(c.Query("limit")); err == nil {
 		limit = v
 		if limit > 40 {
 			limit = 40
@@ -72,9 +76,10 @@ func TimelineHashtag(c echo.Context) error {
 	}
 
 	list, err := misskey.SearchStatusByHashtag(ctx, c.Param("hashtag"),
-		limit, c.QueryParam("max_id"), c.QueryParam("since_id"), c.QueryParam("min_id"))
+		limit, c.Query("max_id"), c.Query("since_id"), c.Query("min_id"))
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, utils.SliceIfNull(list))
+	c.JSON(http.StatusOK, utils.SliceIfNull(list))
 }

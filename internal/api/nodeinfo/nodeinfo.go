@@ -3,20 +3,22 @@ package nodeinfo
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
+	"github.com/gizmo-ds/misstodon/internal/api/httperror"
 	"github.com/gizmo-ds/misstodon/internal/api/middleware"
 	"github.com/gizmo-ds/misstodon/internal/global"
 	"github.com/gizmo-ds/misstodon/models"
 	"github.com/gizmo-ds/misstodon/proxy/misskey"
-	"github.com/labstack/echo/v4"
 )
 
-func Router(e *echo.Group) {
-	group := e.Group("/nodeinfo", middleware.CORS())
+func Router(r *gin.RouterGroup) {
+	group := r.Group("/nodeinfo")
+	group.Use(middleware.CORS())
 	group.GET("/2.0", InfoHandler)
 }
 
-func InfoHandler(c echo.Context) error {
-	server := c.Get("proxy-server").(string)
+func InfoHandler(c *gin.Context) {
+	server := c.GetString("proxy-server")
 	var err error
 	info := models.NodeInfo{
 		Version: "2.0",
@@ -47,8 +49,9 @@ func InfoHandler(c echo.Context) error {
 				},
 			})
 		if err != nil {
-			return err
+			httperror.AbortWithError(c, http.StatusInternalServerError, err)
+			return
 		}
 	}
-	return c.JSON(http.StatusOK, info)
+	c.JSON(http.StatusOK, info)
 }

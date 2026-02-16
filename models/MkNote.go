@@ -39,6 +39,7 @@ type MkNote struct {
 	Files        []MkFile         `json:"files"`
 	Tags         []string         `json:"tags"`
 	MyReaction   string           `json:"myReaction"`
+	Poll         *MkPoll          `json:"poll"`
 }
 
 func (n *MkNote) ToStatus(server string) Status {
@@ -51,6 +52,7 @@ func (n *MkNote) ToStatus(server string) Status {
 		MediaAttachments: []MediaAttachment{},
 		Mentions:         []StatusMention{},
 		ReBlogsCount:     n.ReNoteCount,
+		RepliesCount:     n.RepliesCount,
 		Favourited:       n.MyReaction != "",
 	}
 	s.FavouritesCount = func() int {
@@ -82,10 +84,14 @@ func (n *MkNote) ToStatus(server string) Status {
 		}
 	}
 	switch n.Visibility {
-	case MkNoteVisibilityPublic, MkNoteVisibilityHome, MkNoteVisibilitySpecif:
+	case MkNoteVisibilityPublic:
 		s.Visibility = StatusVisibilityPublic
+	case MkNoteVisibilityHome:
+		s.Visibility = StatusVisibilityUnlisted
 	case MkNoteVisibilityFollow:
 		s.Visibility = StatusVisibilityPrivate
+	case MkNoteVisibilitySpecif:
+		s.Visibility = StatusVisibilityDirect
 	default:
 		s.Visibility = StatusVisibilityPrivate
 	}
@@ -103,9 +109,19 @@ func (n *MkNote) ToStatus(server string) Status {
 	if n.Cw != nil {
 		s.SpoilerText = *n.Cw
 	}
+	if n.ReplyID != nil {
+		s.InReplyToID = n.ReplyID
+		if n.Reply != nil && n.Reply.User != nil {
+			uid := n.Reply.UserId
+			s.InReplyToAccountId = &uid
+		}
+	}
 	if n.ReNote != nil {
 		re := n.ReNote.ToStatus(server)
 		s.ReBlog = &re
+	}
+	if n.Poll != nil {
+		s.Poll = n.Poll.ToPoll(n.ID)
 	}
 	return s
 }

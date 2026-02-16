@@ -1,7 +1,6 @@
 package global
 
 import (
-	"github.com/gizmo-ds/misstodon/internal/database"
 	"github.com/jinzhu/configor"
 )
 
@@ -24,14 +23,6 @@ type config struct {
 		MaxAge        int    `toml:"max_age" yaml:"max_age" env:"MISSTODON_LOGGER_MAX_AGE"`
 		MaxBackups    int    `toml:"max_backups" yaml:"max_backups" env:"MISSTODON_LOGGER_MAX_BACKUPS"`
 	} `toml:"logger" yaml:"logger"`
-	Database struct {
-		Type     database.DbType `toml:"type" yaml:"type" env:"MISSTODON_DATABASE_TYPE"`
-		Address  string          `toml:"address" yaml:"address" env:"MISSTODON_DATABASE_ADDRESS"`
-		Port     int             `toml:"port" yaml:"port" env:"MISSTODON_DATABASE_PORT"`
-		User     string          `toml:"user" yaml:"user" env:"MISSTODON_DATABASE_USER"`
-		Password string          `toml:"password" yaml:"password" env:"MISSTODON_DATABASE_PASSWORD"`
-		DbName   string          `toml:"db_name" yaml:"db_name" env:"MISSTODON_DATABASE_DBNAME"`
-	} `toml:"database" yaml:"database"`
 }
 
 var Config config

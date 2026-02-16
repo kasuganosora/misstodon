@@ -1,45 +1,24 @@
-//go:generate npm run build
 package mfm
 
 import (
 	"bytes"
-	_ "embed"
-	"encoding/json"
 	"strings"
 
-	"github.com/dop251/goja"
 	"github.com/gizmo-ds/misstodon/internal/utils"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/html"
 )
 
-//go:embed out.js
-var script string
 var DefaultMfmOption = Option{
 	Url: "https://misskey.io",
 }
 
-var vm = goja.New()
-var parseText func(string) string
-
-func init() {
-	_, err := vm.RunString(script)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to run mfm.js")
-	}
-	if err = vm.ExportTo(vm.Get("parse"), &parseText); err != nil {
-		log.Fatal().Err(err).Msg("Failed to export parse function")
-	}
-}
-
-// Parse parses MFM to nodes.
+// Parse parses MFM text into nodes.
 func Parse(text string) ([]MfmNode, error) {
-	var nodes []MfmNode
-	err := json.Unmarshal([]byte(parseText(text)), &nodes)
-	return nodes, err
+	return parse(text), nil
 }
 
-// ToHtml converts MFM to HTML.
+// ToHtml converts MFM text to HTML.
 func ToHtml(text string, option ...Option) (string, error) {
 	nodes, err := Parse(text)
 	if err != nil {
@@ -64,7 +43,6 @@ func toHtml(nodes []MfmNode, option ...Option) (string, error) {
 		return "", err
 	}
 	h := buf.String()
-	// NOTE: misskey的br标签不符合XHTML 1.1，需要替换为<br>
 	h = strings.ReplaceAll(h, "<br/>", "<br>")
 	return h, nil
 }
@@ -201,7 +179,7 @@ func appendChildren(parent *html.Node, children []MfmNode, option ...Option) {
 			appendChildren(n, child.Children, option...)
 			parent.AppendChild(n)
 
-		case nodeTypeBlockCode: // NOTE: 当前版本的mfm.js(0.23.3)不支持, 所以下面的代码没有进行测试
+		case nodeTypeBlockCode:
 			pre := &html.Node{
 				Type: html.ElementNode,
 				Data: "pre",

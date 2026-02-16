@@ -39,4 +39,49 @@ type (
 		ID   string `json:"id"`
 		Text string `json:"text"`
 	}
+	InstanceV2 struct {
+		Domain        string   `json:"domain"`
+		Title         string   `json:"title"`
+		Version       string   `json:"version"`
+		SourceURL     string   `json:"source_url"`
+		Description   string   `json:"description"`
+		Usage         struct {
+			Users struct {
+				ActiveMonth int `json:"active_month"`
+			} `json:"users"`
+		} `json:"usage"`
+		Thumbnail struct {
+			URL string `json:"url"`
+		} `json:"thumbnail"`
+		Languages     []string       `json:"languages"`
+		Configuration struct {
+			Statuses struct {
+				MaxCharacters            int `json:"max_characters"`
+				MaxMediaAttachments      int `json:"max_media_attachments"`
+				CharactersReservedPerUrl int `json:"characters_reserved_per_url"`
+			} `json:"statuses"`
+			MediaAttachments struct {
+				SupportedMimeTypes []string `json:"supported_mime_types"`
+			} `json:"media_attachments"`
+			Polls struct {
+				MaxOptions             int `json:"max_options"`
+				MaxCharactersPerOption int `json:"max_characters_per_option"`
+				MinExpiration          int `json:"min_expiration"`
+				MaxExpiration          int `json:"max_expiration"`
+			} `json:"polls"`
+			Translation struct {
+				Enabled bool `json:"enabled"`
+			} `json:"translation"`
+		} `json:"configuration"`
+		Registrations struct {
+			Enabled          bool    `json:"enabled"`
+			ApprovalRequired bool    `json:"approval_required"`
+			Message          *string `json:"message"`
+		} `json:"registrations"`
+		Contact struct {
+			Email   string   `json:"email"`
+			Account *Account `json:"account"`
+		} `json:"contact"`
+		Rules []InstanceRule `json:"rules"`
+	}
 )

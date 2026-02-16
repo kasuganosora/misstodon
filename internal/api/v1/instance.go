@@ -3,42 +3,52 @@ package v1
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
+	"github.com/gizmo-ds/misstodon/internal/api/httperror"
 	"github.com/gizmo-ds/misstodon/internal/global"
 	"github.com/gizmo-ds/misstodon/internal/utils"
 	"github.com/gizmo-ds/misstodon/proxy/misskey"
-	"github.com/labstack/echo/v4"
 )
 
-func InstanceRouter(e *echo.Group) {
-	group := e.Group("/instance")
+func InstanceRouter(r *gin.RouterGroup) {
+	group := r.Group("/instance")
 	group.GET("", InstanceHandler)
 	group.GET("/peers", InstancePeersHandler)
-	e.GET("/custom_emojis", InstanceCustomEmojis)
+	group.GET("/rules", InstanceRulesHandler)
+	r.GET("/custom_emojis", InstanceCustomEmojis)
 }
 
-func InstanceHandler(c echo.Context) error {
+func InstanceHandler(c *gin.Context) {
 	info, err := misskey.Instance(
-		c.Get("proxy-server").(string),
-		global.AppVersion)
+		c.GetString("proxy-server"),
+		global.AppVersion,
+		c.Request.Host)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, info)
+	c.JSON(http.StatusOK, info)
 }
 
-func InstancePeersHandler(c echo.Context) error {
-	peers, err := misskey.InstancePeers(c.Get("proxy-server").(string))
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, utils.SliceIfNull(peers))
+func InstanceRulesHandler(c *gin.Context) {
+	c.JSON(http.StatusOK, []any{})
 }
 
-func InstanceCustomEmojis(c echo.Context) error {
-	server := c.Get("proxy-server").(string)
+func InstancePeersHandler(c *gin.Context) {
+	peers, err := misskey.InstancePeers(c.GetString("proxy-server"))
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, utils.SliceIfNull(peers))
+}
+
+func InstanceCustomEmojis(c *gin.Context) {
+	server := c.GetString("proxy-server")
 	emojis, err := misskey.InstanceCustomEmojis(server)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, emojis)
+	c.JSON(http.StatusOK, emojis)
 }

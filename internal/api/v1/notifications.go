@@ -3,37 +3,95 @@ package v1
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gizmo-ds/misstodon/internal/api/httperror"
 	"github.com/gizmo-ds/misstodon/internal/misstodon"
 	"github.com/gizmo-ds/misstodon/models"
 	"github.com/gizmo-ds/misstodon/proxy/misskey"
-	"github.com/labstack/echo/v4"
 	"github.com/samber/lo"
 )
 
-func NotificationsRouter(e *echo.Group) {
-	group := e.Group("/notifications")
-	group.GET("", NotificationsJandler)
+func NotificationsRouter(r *gin.RouterGroup) {
+	group := r.Group("/notifications")
+	group.GET("", NotificationsHandler)
+	group.GET("/unread_count", NotificationsUnreadCount)
+	group.POST("/clear", NotificationsClear)
+	group.GET("/:id", NotificationGet)
+	group.POST("/:id/dismiss", NotificationDismiss)
 }
 
-func NotificationsJandler(c echo.Context) error {
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+func NotificationsUnreadCount(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		// Fall back to 0 if not authenticated
+		c.JSON(http.StatusOK, gin.H{"count": 0})
+		return
+	}
+	count, err := misskey.NotificationsUnreadCount(ctx)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"count": 0})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"count": count})
+}
+
+func NotificationsClear(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
+	}
+	if err := misskey.NotificationsClear(ctx); err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{})
+}
+
+func NotificationGet(c *gin.Context) {
+	id := c.Param("id")
+	ctx, err := misstodon.ContextWithGinContext(c, true)
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
+	}
+	notification, err := misskey.NotificationGet(ctx, id)
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, notification)
+}
+
+func NotificationDismiss(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 	_ = ctx
-	var query struct {
-		MaxId   string `query:"max_id"`
-		MinId   string `query:"min_id"`
-		SinceId string `query:"since_id"`
-		Limit   int    `query:"limit"`
+	c.JSON(http.StatusOK, gin.H{})
+}
+
+func NotificationsHandler(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
-	if err := c.Bind(&query); err != nil {
-		return c.JSON(http.StatusBadRequest, httperror.ServerError{Error: err.Error()})
+	var query struct {
+		MaxId   string `form:"max_id"`
+		MinId   string `form:"min_id"`
+		SinceId string `form:"since_id"`
+		Limit   int    `form:"limit"`
+	}
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, httperror.ServerError{Error: err.Error()})
+		return
 	}
 
 	getTypes := func(name string) []models.NotificationType {
-		types := lo.Map(c.QueryParams()[name], func(item string, _ int) models.NotificationType { return models.NotificationType(item) })
+		types := lo.Map(c.QueryArray(name), func(item string, _ int) models.NotificationType { return models.NotificationType(item) })
 		types = lo.Filter(types, func(item models.NotificationType, _ int) bool {
 			return item != "" && item.ToMkNotificationType() != models.MkNotificationTypeUnknown
 		})
@@ -47,7 +105,8 @@ func NotificationsJandler(c echo.Context) error {
 		query.Limit, query.SinceId, query.MinId, query.MaxId,
 		types, excludeTypes, "")
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, result)
 }

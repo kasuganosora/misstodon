@@ -39,7 +39,7 @@ type (
 		Language           *string           `json:"language"`
 		Mentions           []StatusMention   `json:"mentions"`
 		Muted              bool              `json:"muted"`
-		Poll               *struct{}         `json:"poll"`
+		Poll               *Poll             `json:"poll"`
 		ReBlog             *Status           `json:"reblog"`
 		ReBlogged          bool              `json:"reblogged"`
 		ReBlogsCount       int               `json:"reblogs_count"`

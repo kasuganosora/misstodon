@@ -1,11 +1,9 @@
 package httperror
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 	"github.com/rs/xid"
 	"github.com/rs/zerolog/log"
 )
@@ -15,19 +13,33 @@ type ServerError struct {
 	Error   string `json:"error"`
 }
 
-func ErrorHandler(err error, c echo.Context) {
-	code := http.StatusInternalServerError
-	if err == nil {
-		return
-	}
+func ErrorHandler(c *gin.Context) {
+	c.Next()
 
+	if len(c.Errors) > 0 {
+		err := c.Errors.Last()
+		code := http.StatusInternalServerError
+		info := ServerError{Error: err.Error()}
+
+		if code == http.StatusInternalServerError {
+			id := xid.New().String()
+			info = ServerError{
+				TraceID: id,
+				Error:   "Internal Server Error",
+			}
+			log.Warn().Err(err).
+				Str("user_agent", c.Request.UserAgent()).
+				Str("trace_id", id).
+				Int("code", code).
+				Msg("Server Error")
+		}
+		c.JSON(code, info)
+	}
+}
+
+func AbortWithError(c *gin.Context, code int, err error) {
+	c.Abort()
 	info := ServerError{Error: err.Error()}
-	var he *echo.HTTPError
-	if errors.As(err, &he) {
-		code = he.Code
-		info.Error = fmt.Sprint(he.Message)
-	}
-
 	if code == http.StatusInternalServerError {
 		id := xid.New().String()
 		info = ServerError{
@@ -35,10 +47,10 @@ func ErrorHandler(err error, c echo.Context) {
 			Error:   "Internal Server Error",
 		}
 		log.Warn().Err(err).
-			Str("user_agent", c.Request().UserAgent()).
+			Str("user_agent", c.Request.UserAgent()).
 			Str("trace_id", id).
 			Int("code", code).
 			Msg("Server Error")
 	}
-	_ = c.JSON(code, info)
+	c.JSON(code, info)
 }

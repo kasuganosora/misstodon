@@ -5,20 +5,21 @@ import (
 	"mime/multipart"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gizmo-ds/misstodon/internal/api/httperror"
 	"github.com/gizmo-ds/misstodon/internal/misstodon"
 	"github.com/gizmo-ds/misstodon/internal/utils"
 	"github.com/gizmo-ds/misstodon/models"
 	"github.com/gizmo-ds/misstodon/proxy/misskey"
-	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 )
 
-func AccountsRouter(e *echo.Group) {
-	group := e.Group("/accounts")
-	e.GET("/favourites", AccountFavourites)
+func AccountsRouter(r *gin.RouterGroup) {
+	group := r.Group("/accounts")
+	r.GET("/favourites", AccountFavourites)
 	group.GET("/verify_credentials", AccountsVerifyCredentialsHandler)
 	group.PATCH("/update_credentials", AccountsUpdateCredentialsHandler)
+	group.GET("/search", AccountSearchHandler)
 	group.GET("/lookup", AccountsLookupHandler)
 	group.GET("/:id", AccountsGetHandler)
 	group.GET("/:id/statuses", AccountsStatusesHandler)
@@ -29,52 +30,62 @@ func AccountsRouter(e *echo.Group) {
 	group.POST("/:id/unfollow", AccountUnfollow)
 	group.POST("/:id/mute", AccountMute)
 	group.POST("/:id/unmute", AccountUnmute)
+	group.POST("/:id/block", AccountBlock)
+	group.POST("/:id/unblock", AccountUnblock)
+	group.GET("/:id/lists", func(c *gin.Context) { c.JSON(200, []any{}) })
+	group.GET("/:id/featured_tags", func(c *gin.Context) { c.JSON(200, []any{}) })
 }
 
-func AccountsVerifyCredentialsHandler(c echo.Context) error {
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+func AccountsVerifyCredentialsHandler(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 	info, err := misskey.VerifyCredentials(ctx)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, info)
+	c.JSON(http.StatusOK, info)
 }
 
-func AccountsLookupHandler(c echo.Context) error {
-	acct := c.QueryParam("acct")
+func AccountsLookupHandler(c *gin.Context) {
+	acct := c.Query("acct")
 	if acct == "" {
-		return c.JSON(http.StatusBadRequest, httperror.ServerError{
+		c.JSON(http.StatusBadRequest, httperror.ServerError{
 			Error: "acct is required",
 		})
+		return
 	}
-	ctx, _ := misstodon.ContextWithEchoContext(c)
+	ctx, _ := misstodon.ContextWithGinContext(c)
 	info, err := misskey.AccountsLookup(ctx, acct)
 	if err != nil {
 		if errors.Is(err, misskey.ErrNotFound) {
-			return c.JSON(http.StatusNotFound, httperror.ServerError{
+			c.JSON(http.StatusNotFound, httperror.ServerError{
 				Error: "Record not found",
 			})
+			return
 		} else if errors.Is(err, misskey.ErrAcctIsInvalid) {
-			return c.JSON(http.StatusBadRequest, httperror.ServerError{
+			c.JSON(http.StatusBadRequest, httperror.ServerError{
 				Error: err.Error(),
 			})
+			return
 		}
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
 	if info.Header == "" || info.HeaderStatic == "" {
-		info.Header = fmt.Sprintf("%s://%s/static/missing.png", c.Scheme(), c.Request().Host)
+		info.Header = fmt.Sprintf("https://%s/static/missing.png", c.Request.Host)
 		info.HeaderStatic = info.Header
 	}
-	return c.JSON(http.StatusOK, info)
+	c.JSON(http.StatusOK, info)
 }
 
-func AccountsStatusesHandler(c echo.Context) error {
+func AccountsStatusesHandler(c *gin.Context) {
 	uid := c.Param("id")
 
-	ctx, _ := misstodon.ContextWithEchoContext(c)
+	ctx, _ := misstodon.ContextWithGinContext(c)
 
 	limit := 30
 	pinnedOnly := false
@@ -84,43 +95,63 @@ func AccountsStatusesHandler(c echo.Context) error {
 	excludeReblogs := false
 	maxID := ""
 	minID := ""
-	if err := echo.QueryParamsBinder(c).
-		Int("limit", &limit).
-		Bool("pinned_only", &pinnedOnly).
-		Bool("only_media", &onlyMedia).
-		Bool("only_public", &onlyPublic).
-		Bool("exclude_replies", &excludeReplies).
-		Bool("exclude_reblogs", &excludeReblogs).
-		String("max_id", &maxID).
-		String("min_id", &minID).
-		BindError(); err != nil {
-		var e *echo.BindingError
-		errors.As(err, &e)
-		return c.JSON(http.StatusBadRequest, echo.Map{
-			"field": e.Field,
-			"error": e.Message,
-		})
+
+	var query struct {
+		Limit         *int  `form:"limit"`
+		PinnedOnly    *bool `form:"pinned_only"`
+		OnlyMedia     *bool `form:"only_media"`
+		OnlyPublic    *bool `form:"only_public"`
+		ExcludeReplies *bool `form:"exclude_replies"`
+		ExcludeReblogs *bool `form:"exclude_reblogs"`
+		MaxID         string `form:"max_id"`
+		MinID         string `form:"min_id"`
 	}
+	if err := c.ShouldBindQuery(&query); err == nil {
+		if query.Limit != nil {
+			limit = *query.Limit
+		}
+		if query.PinnedOnly != nil {
+			pinnedOnly = *query.PinnedOnly
+		}
+		if query.OnlyMedia != nil {
+			onlyMedia = *query.OnlyMedia
+		}
+		if query.OnlyPublic != nil {
+			onlyPublic = *query.OnlyPublic
+		}
+		if query.ExcludeReplies != nil {
+			excludeReplies = *query.ExcludeReplies
+		}
+		if query.ExcludeReblogs != nil {
+			excludeReblogs = *query.ExcludeReblogs
+		}
+		maxID = query.MaxID
+		minID = query.MinID
+	}
+
 	statuses, err := misskey.AccountsStatuses(
 		ctx, uid,
 		limit,
 		pinnedOnly, onlyMedia, onlyPublic, excludeReplies, excludeReblogs,
 		maxID, minID)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, utils.SliceIfNull(statuses))
+	c.JSON(http.StatusOK, utils.SliceIfNull(statuses))
 }
 
-func AccountsUpdateCredentialsHandler(c echo.Context) error {
+func AccountsUpdateCredentialsHandler(c *gin.Context) {
 	form, err := parseAccountsUpdateCredentialsForm(c)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, httperror.ServerError{Error: err.Error()})
+		c.JSON(http.StatusBadRequest, httperror.ServerError{Error: err.Error()})
+		return
 	}
 
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 
 	account, err := misskey.UpdateCredentials(ctx,
@@ -130,9 +161,10 @@ func AccountsUpdateCredentialsHandler(c echo.Context) error {
 		form.AccountFields,
 		form.Avatar, form.Header)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, account)
+	c.JSON(http.StatusOK, account)
 }
 
 type accountsUpdateCredentialsForm struct {
@@ -149,22 +181,24 @@ type accountsUpdateCredentialsForm struct {
 	Header          *multipart.FileHeader
 }
 
-func parseAccountsUpdateCredentialsForm(c echo.Context) (f accountsUpdateCredentialsForm, err error) {
+func parseAccountsUpdateCredentialsForm(c *gin.Context) (f accountsUpdateCredentialsForm, err error) {
 	var form accountsUpdateCredentialsForm
-	if err = c.Bind(&form); err != nil {
+	if err = c.ShouldBind(&form); err != nil {
 		return
 	}
 
 	var values = make(map[string][]string)
-	for k, v := range c.QueryParams() {
+	for k, v := range c.Request.URL.Query() {
 		values[k] = v
 	}
-	if fp, err := c.FormParams(); err == nil {
-		for k, v := range fp {
-			values[k] = v
+	if c.Request.Method == "POST" || c.Request.Method == "PATCH" {
+		if fp := c.Request.PostForm; fp != nil {
+			for k, v := range fp {
+				values[k] = v
+			}
 		}
 	}
-	if mf, err := c.MultipartForm(); err == nil {
+	if mf := c.Request.MultipartForm; mf != nil {
 		for k, v := range mf.Value {
 			values[k] = v
 		}
@@ -181,40 +215,82 @@ func parseAccountsUpdateCredentialsForm(c echo.Context) (f accountsUpdateCredent
 	return form, nil
 }
 
-func AccountFollowRequests(c echo.Context) error {
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+func AccountFollowRequests(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 	var query struct {
-		Limit   int    `query:"limit"`
-		MaxID   string `query:"max_id"`
-		SinceID string `query:"since_id"`
+		Limit   int    `form:"limit"`
+		MaxID   string `form:"max_id"`
+		SinceID string `form:"since_id"`
 	}
-	if err = c.Bind(&query); err != nil {
-		return err
+	if err = c.ShouldBindQuery(&query); err != nil {
+		httperror.AbortWithError(c, http.StatusBadRequest, err)
+		return
 	}
 	if query.Limit <= 0 {
 		query.Limit = 40
 	}
 	accounts, err := misskey.AccountFollowRequests(ctx, query.Limit, query.SinceID, query.MaxID)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, utils.SliceIfNull(accounts))
+	c.JSON(http.StatusOK, utils.SliceIfNull(accounts))
 }
 
-func AccountFollowers(c echo.Context) error {
-	ctx, _ := misstodon.ContextWithEchoContext(c)
+func FollowRequestAuthorize(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
+	}
+	id := c.Param("id")
+	if err := misskey.AccountFollowRequestsAccept(ctx, id); err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	relationships, err := misskey.AccountRelationships(ctx, []string{id})
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, relationships[0])
+}
+
+func FollowRequestReject(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
+	}
+	id := c.Param("id")
+	if err := misskey.AccountFollowRequestsReject(ctx, id); err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	relationships, err := misskey.AccountRelationships(ctx, []string{id})
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, relationships[0])
+}
+
+func AccountFollowers(c *gin.Context) {
+	ctx, _ := misstodon.ContextWithGinContext(c)
 	id := c.Param("id")
 	var query struct {
-		Limit   int    `query:"limit"`
-		MaxID   string `query:"max_id"`
-		MinID   string `query:"min_id"`
-		SinceID string `query:"since_id"`
+		Limit   int    `form:"limit"`
+		MaxID   string `form:"max_id"`
+		MinID   string `form:"min_id"`
+		SinceID string `form:"since_id"`
 	}
-	if err := c.Bind(&query); err != nil {
-		return c.JSON(http.StatusBadRequest, httperror.ServerError{Error: err.Error()})
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, httperror.ServerError{Error: err.Error()})
+		return
 	}
 	if query.Limit <= 0 {
 		query.Limit = 40
@@ -224,23 +300,25 @@ func AccountFollowers(c echo.Context) error {
 	}
 	accounts, err := misskey.AccountFollowers(ctx, id, query.Limit, query.SinceID, query.MinID, query.MaxID)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, utils.SliceIfNull(accounts))
+	c.JSON(http.StatusOK, utils.SliceIfNull(accounts))
 }
 
-func AccountFollowing(c echo.Context) error {
-	ctx, _ := misstodon.ContextWithEchoContext(c)
+func AccountFollowing(c *gin.Context) {
+	ctx, _ := misstodon.ContextWithGinContext(c)
 
 	id := c.Param("id")
 	var query struct {
-		Limit   int    `query:"limit"`
-		MaxID   string `query:"max_id"`
-		MinID   string `query:"min_id"`
-		SinceID string `query:"since_id"`
+		Limit   int    `form:"limit"`
+		MaxID   string `form:"max_id"`
+		MinID   string `form:"min_id"`
+		SinceID string `form:"since_id"`
 	}
-	if err := c.Bind(&query); err != nil {
-		return c.JSON(http.StatusBadRequest, httperror.ServerError{Error: err.Error()})
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, httperror.ServerError{Error: err.Error()})
+		return
 	}
 	if query.Limit <= 0 {
 		query.Limit = 40
@@ -250,18 +328,20 @@ func AccountFollowing(c echo.Context) error {
 	}
 	accounts, err := misskey.AccountFollowing(ctx, id, query.Limit, query.SinceID, query.MinID, query.MaxID)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, utils.SliceIfNull(accounts))
+	c.JSON(http.StatusOK, utils.SliceIfNull(accounts))
 }
 
-func AccountRelationships(c echo.Context) error {
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+func AccountRelationships(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 	var ids []string
-	for k, v := range c.QueryParams() {
+	for k, v := range c.Request.URL.Query() {
 		if k == "id[]" {
 			ids = append(ids, v...)
 			continue
@@ -269,108 +349,129 @@ func AccountRelationships(c echo.Context) error {
 	}
 	relationships, err := misskey.AccountRelationships(ctx, ids)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, relationships)
+	c.JSON(http.StatusOK, relationships)
 }
 
-func AccountFollow(c echo.Context) error {
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+func AccountFollow(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 	id := c.Param("id")
 	if err = misskey.AccountFollow(ctx, id); err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
 	relationships, err := misskey.AccountRelationships(ctx, []string{id})
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, relationships[0])
+	c.JSON(http.StatusOK, relationships[0])
 }
 
-func AccountUnfollow(c echo.Context) error {
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+func AccountUnfollow(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 	id := c.Param("id")
 	if err = misskey.AccountUnfollow(ctx, id); err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
 	relationships, err := misskey.AccountRelationships(ctx, []string{id})
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, relationships[0])
+	c.JSON(http.StatusOK, relationships[0])
 }
 
-func AccountMute(c echo.Context) error {
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+func AccountMute(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 	var params struct {
-		ID       string `param:"id"`
+		ID       string `uri:"id"`
 		Duration int64  `json:"duration" form:"duration"`
 	}
-	if err := c.Bind(&params); err != nil {
-		return err
+	if err := c.ShouldBindUri(&params); err != nil {
+		httperror.AbortWithError(c, http.StatusBadRequest, err)
+		return
+	}
+	if err := c.ShouldBind(&params); err != nil {
+		httperror.AbortWithError(c, http.StatusBadRequest, err)
+		return
 	}
 	if err = misskey.AccountMute(ctx, params.ID, params.Duration); err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
 	relationships, err := misskey.AccountRelationships(ctx, []string{params.ID})
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, relationships[0])
+	c.JSON(http.StatusOK, relationships[0])
 }
 
-func AccountUnmute(c echo.Context) error {
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+func AccountUnmute(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 	id := c.Param("id")
 	if err = misskey.AccountUnmute(ctx, id); err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
 	relationships, err := misskey.AccountRelationships(ctx, []string{id})
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, relationships[0])
+	c.JSON(http.StatusOK, relationships[0])
 }
 
-func AccountsGetHandler(c echo.Context) error {
-	ctx, _ := misstodon.ContextWithEchoContext(c)
+func AccountsGetHandler(c *gin.Context) {
+	ctx, _ := misstodon.ContextWithGinContext(c)
 	info, err := misskey.AccountsGet(ctx, c.Param("id"))
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
 	if info.Header == "" || info.HeaderStatic == "" {
-		info.Header = fmt.Sprintf("%s://%s/static/missing.png", c.Scheme(), c.Request().Host)
+		info.Header = fmt.Sprintf("https://%s/static/missing.png", c.Request.Host)
 		info.HeaderStatic = info.Header
 	}
-	return c.JSON(http.StatusOK, info)
+	c.JSON(http.StatusOK, info)
 }
 
-func AccountFavourites(c echo.Context) error {
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+func AccountFavourites(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 
 	var params struct {
-		Limit   int    `query:"limit"`
-		MaxID   string `query:"max_id"`
-		MinID   string `query:"min_id"`
-		SinceID string `query:"since_id"`
+		Limit   int    `form:"limit"`
+		MaxID   string `form:"max_id"`
+		MinID   string `form:"min_id"`
+		SinceID string `form:"since_id"`
 	}
-	if err = c.Bind(&params); err != nil {
-		return err
+	if err = c.ShouldBindQuery(&params); err != nil {
+		httperror.AbortWithError(c, http.StatusBadRequest, err)
+		return
 	}
 	if params.Limit <= 0 {
 		params.Limit = 20
@@ -378,7 +479,69 @@ func AccountFavourites(c echo.Context) error {
 	list, err := misskey.AccountFavourites(ctx,
 		params.Limit, params.SinceID, params.MinID, params.MaxID)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, list)
+	c.JSON(http.StatusOK, utils.SliceIfNull(list))
+}
+
+func AccountSearchHandler(c *gin.Context) {
+	ctx, _ := misstodon.ContextWithGinContext(c)
+	var query struct {
+		Q       string `form:"q"`
+		Limit   int    `form:"limit"`
+		Offset  int    `form:"offset"`
+		Resolve bool   `form:"resolve"`
+	}
+	if err := c.ShouldBindQuery(&query); err != nil {
+		c.JSON(http.StatusBadRequest, httperror.ServerError{Error: err.Error()})
+		return
+	}
+	if query.Limit <= 0 {
+		query.Limit = 40
+	}
+	accounts, err := misskey.AccountSearch(ctx, query.Q, query.Limit, query.Offset)
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, utils.SliceIfNull(accounts))
+}
+
+func AccountBlock(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
+	}
+	id := c.Param("id")
+	if err = misskey.AccountBlock(ctx, id); err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	relationships, err := misskey.AccountRelationships(ctx, []string{id})
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, relationships[0])
+}
+
+func AccountUnblock(c *gin.Context) {
+	ctx, err := misstodon.ContextWithGinContext(c, true)
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
+	}
+	id := c.Param("id")
+	if err = misskey.AccountUnblock(ctx, id); err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	relationships, err := misskey.AccountRelationships(ctx, []string{id})
+	if err != nil {
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, relationships[0])
 }

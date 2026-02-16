@@ -3,14 +3,13 @@ package commands
 import (
 	_ "embed"
 	"fmt"
+	"net/http"
 	"path/filepath"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gizmo-ds/misstodon/internal/api"
-	"github.com/gizmo-ds/misstodon/internal/database"
 	"github.com/gizmo-ds/misstodon/internal/global"
 	"github.com/gizmo-ds/misstodon/internal/utils"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/acme/autocert"
@@ -44,35 +43,41 @@ var Start = &cli.Command{
 	},
 	Action: func(c *cli.Context) error {
 		conf := global.Config
-		global.DB = database.NewDatabase(
-			conf.Database.Type,
-			conf.Database.Address)
-		defer global.DB.Close()
 		if c.IsSet("fallbackServer") {
 			conf.Proxy.FallbackServer = c.String("fallbackServer")
 		}
 		bindAddress, _ := utils.StrEvaluation(c.String("bind"), conf.Server.BindAddress)
 
-		e := echo.New()
-		e.HidePort, e.HideBanner = true, true
+		gin.SetMode(gin.ReleaseMode)
+		r := gin.New()
 
-		api.Router(e)
+		api.Router(r)
 
 		logStart := log.Info().Str("address", bindAddress)
 		switch {
 		case conf.Server.AutoTLS && conf.Server.Domain != "":
-			e.Pre(middleware.HTTPSNonWWWRedirect())
 			cacheDir, _ := filepath.Abs("./cert/.cache")
-			e.AutoTLSManager.Cache = autocert.DirCache(cacheDir)
-			e.AutoTLSManager.HostPolicy = autocert.HostWhitelist(conf.Server.Domain)
+			tlsManager := &autocert.Manager{
+				Prompt:     autocert.AcceptTOS,
+				HostPolicy: autocert.HostWhitelist(conf.Server.Domain),
+				Cache:      autocert.DirCache(cacheDir),
+			}
 			logStart.Msg("Starting server with AutoTLS")
-			return e.StartAutoTLS(bindAddress)
+			server := &http.Server{
+				Addr:      ":https",
+				TLSConfig: tlsManager.TLSConfig(),
+				Handler:   r,
+			}
+			go func() {
+				_ = http.ListenAndServe(":http", tlsManager.HTTPHandler(nil))
+			}()
+			return server.ListenAndServeTLS("", "")
 		case conf.Server.TlsCertFile != "" && conf.Server.TlsKeyFile != "":
 			logStart.Msg("Starting server with TLS")
-			return e.StartTLS(bindAddress, conf.Server.TlsCertFile, conf.Server.TlsKeyFile)
+			return r.RunTLS(bindAddress, conf.Server.TlsCertFile, conf.Server.TlsKeyFile)
 		default:
 			logStart.Msg("Starting server")
-			return e.Start(bindAddress)
+			return r.Run(bindAddress)
 		}
 	},
 }

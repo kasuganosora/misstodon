@@ -65,3 +65,49 @@ func NotificationsGet(ctx Context,
 	})
 	return notifications, nil
 }
+
+func NotificationsClear(ctx Context) error {
+	resp, err := client.R().
+		SetBody(makeBody(ctx, nil)).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notifications/mark-all-as-read"))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusNoContent); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
+}
+
+func NotificationsUnreadCount(ctx Context) (int, error) {
+	var result struct {
+		UnreadNotificationsCount int `json:"unreadNotificationsCount"`
+	}
+	resp, err := client.R().
+		SetBody(makeBody(ctx, nil)).
+		SetResult(&result).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/i"))
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusOK); err != nil {
+		return 0, errors.WithStack(err)
+	}
+	return result.UnreadNotificationsCount, nil
+}
+
+func NotificationGet(ctx Context, id string) (models.Notification, error) {
+	var mkNotification models.MkNotification
+	body := makeBody(ctx, utils.Map{"notificationId": id})
+	resp, err := client.R().
+		SetBody(body).
+		SetResult(&mkNotification).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notifications/show"))
+	if err != nil {
+		return models.Notification{}, errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusOK); err != nil {
+		return models.Notification{}, errors.WithStack(err)
+	}
+	return mkNotification.ToNotification(ctx.ProxyServer())
+}

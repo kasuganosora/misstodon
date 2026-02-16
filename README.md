@@ -5,132 +5,194 @@
 [![Build images](https://img.shields.io/github/actions/workflow/status/gizmo-ds/misstodon/images.yaml?branch=main&label=docker%20image&style=flat-square)](https://github.com/gizmo-ds/misstodon/actions/workflows/images.yaml)
 [![License](https://img.shields.io/github/license/gizmo-ds/misstodon?style=flat-square)](./LICENSE)
 
-Misskey Mastodon-compatible APIs, Getting my [Misskey](https://github.com/misskey-dev/misskey/tree/13.2.0) instance to work in [Elk](https://github.com/elk-zone/elk)
+Misskey Mastodon-compatible APIs — use any Mastodon client (Elk, Phanpy, Ivory, Tusky, Ice Cubes...) with your [Misskey](https://github.com/misskey-dev/misskey) instance.
 
-> **Warning**  
-> This project is still in the early stage of development, and is not ready for production use.
+> **Note**
+> This project is under active development. Most common Mastodon client workflows (login, timelines, posting, notifications) are functional.
 
-## Demo
+## Features
 
-Elk: [https://elk.zone/misstodon.liuli.lol/public](https://elk.zone/misstodon.liuli.lol/public)  
-Elk: [https://elk.zone/mt_misskey_moe.liuli.lol/explore](https://elk.zone/mt_misskey_moe.liuli.lol/explore)  
-Phanpy: [https://phanpy.social/#/mt_misskey_io.liuli.lol/p](https://phanpy.social/#/mt_misskey_io.liuli.lol/p)
+- Pure Go implementation, no Node.js/JavaScript runtime dependency
+- OAuth authorization flow compatible with standard Mastodon clients
+- MFM (Misskey Flavored Markdown) to HTML conversion
+- Proxy mode: one deployment can serve multiple Misskey instances
+- Self-hosting mode: bind to a single Misskey instance via `fallback_server`
 
-## How to Use
+## Quick Start
 
-> **Warning**  
-> `liuli.lol` is a demonstration site and may not guarantee high availability. We recommend [self-hosting](#running-your-own-instance) for greater control.
+### Self-Hosting (Recommended)
 
-### Domain Name Prefixing Scheme (Recommended)
+The typical setup: deploy Misstodon on a subdomain (e.g. `mapi.a.com`) pointing to your Misskey instance (`a.com`).
 
-The simplest usage method is to specify the instance address using a domain name prefix.
-
-1. Replace underscores ("\_") in the domain name with double underscores ("\_\_").
-2. Replace dots (".") in the domain name with underscores ("\_").
-3. Prepend "mt\_" to the modified string.
-4. Append ".liuli.lol" to the modified string.
-
-When processing `misskey.io` according to the described steps, it will be transformed into the result: `mt_misskey_io.liuli.lol`.
-
-```bash
-curl --request GET --url 'https://mt_misskey_io.liuli.lol/nodeinfo/2.0' | jq .
-```
-
-### Self-Hosting with Default Instance Configuration
-
-Edit the 'config.toml' file, and within the "[proxy]" section, modify the "fallback_server" field. For example:
+1. Edit `config.toml`:
 
 ```toml
 [proxy]
-fallback_server = "misskey.io"
+fallback_server = "a.com"
+
+[server]
+bind_address = ":3000"
 ```
 
-If you are [deploying using Docker Compose](#running-your-own-instance), you can specify the default instance by modifying the 'docker-compose.yml' file. Look for the 'MISSTODON_FALLBACK_SERVER' field within the Docker Compose configuration and set it to the desired default instance.
-
-### Instance Specification via Query Parameter
+2. Run:
 
 ```bash
-curl --request GET --url 'https://misstodon.liuli.lol/nodeinfo/2.0?server=misskey.io' | jq .
+# Binary
+./misstodon -c config.toml
+
+# Or Docker Compose
+docker-compose up -d
 ```
 
-### Instance Specification via Header
+3. Point your Mastodon client to `https://mapi.a.com` and log in.
 
-```bash
-curl --request GET --url https://misstodon.liuli.lol/nodeinfo/2.0 --header 'x-proxy-server: misskey.io' | jq .
-```
+### Docker Compose
 
-## Running your own instance
-
-The simplest way is to use Docker Compose. Download the [docker-compose.yml](https://github.com/gizmo-ds/misstodon/raw/main/docker-compose.yml) file to your local machine. Customize it to your needs, particularly by changing the "MISSTODON_FALLBACK_SERVER" in the "environment" to your preferred Misskey instance domain. Afterward, run the following command:
+Download [docker-compose.yml](https://github.com/gizmo-ds/misstodon/raw/main/docker-compose.yml), set `MISSTODON_FALLBACK_SERVER` to your Misskey instance domain, then:
 
 ```bash
 docker-compose up -d
 ```
 
-> **Important**  
-> For security and privacy, we strongly discourage using HTTP directly. Instead, consider configuring a TLS certificate or utilizing Misstodon's AutoTLS feature for enhanced security.
+> **Important**
+> For security and privacy, always use HTTPS. Configure a TLS certificate or use Misstodon's AutoTLS feature.
 
-## Roadmap
+## Advanced Usage
+
+### Domain Name Prefixing Scheme
+
+For proxy deployments serving multiple Misskey instances, specify the target via domain prefix:
+
+1. Replace `_` with `__` in the Misskey domain
+2. Replace `.` with `_`
+3. Prepend `mt_`
+4. Append your Misstodon base domain
+
+Example: `misskey.io` → `mt_misskey_io.liuli.lol`
+
+```bash
+curl https://mt_misskey_io.liuli.lol/api/v1/instance | jq .
+```
+
+### Instance Specification via Query Parameter
+
+```bash
+curl 'https://misstodon.example.com/api/v1/instance?server=misskey.io' | jq .
+```
+
+### Instance Specification via Header
+
+```bash
+curl https://misstodon.example.com/api/v1/instance -H 'x-proxy-server: misskey.io' | jq .
+```
+
+## API Coverage
 
 <details>
+<summary>Supported Endpoints</summary>
 
-- [x] .well-known
-  - [x] `GET` /.well-known/webfinger
-  - [x] `GET` /.well-known/nodeinfo
-- [x] Nodeinfo
-  - [x] `GET` /nodeinfo/2.0
-- [ ] Auth
-  - [x] `GET` /oauth/authorize
-  - [x] `POST` /oauth/token
-  - [x] `POST` /api/v1/apps
-  - [ ] `GET` /api/v1/apps/verify_credentials
-- [x] Instance
-  - [x] `GET` /api/v1/instance
-  - [x] `GET` /api/v1/custom_emojis
-- [ ] Accounts
-  - [x] `GET` /api/v1/accounts/lookup
-  - [x] `GET` /api/v1/accounts/:user_id
-  - [x] `GET` /api/v1/accounts/verify_credentials
-  - [ ] `PATCH` /api/v1/accounts/update_credentials
-  - [x] `GET` /api/v1/accounts/relationships
-  - [ ] `GET` /api/v1/accounts/:user_id/statuses
-  - [x] `GET` /api/v1/accounts/:user_id/following
-  - [x] `GET` /api/v1/accounts/:user_id/followers
-  - [x] `POST` /api/v1/accounts/:user_id/follow
-  - [x] `POST` /api/v1/accounts/:user_id/unfollow
-  - [x] `GET` /api/v1/follow_requests
-  - [x] `POST` /api/v1/accounts/:user_id/mute
-  - [x] `POST` /api/v1/accounts/:user_id/unmute
-  - [x] `GET` /api/v1/bookmarks
-  - [x] `GET` /api/v1/favourites
-- [ ] Statuses
-  - [x] `POST` /api/v1/statuses
-  - [x] `GET` /api/v1/statuses/:status_id
-  - [ ] `GET` /api/v1/statuses/:status_id/context
-  - [x] `POST` /api/v1/statuses/:status_id/favourite
-  - [x] `POST` /api/v1/statuses/:status_id/unfavourite
-  - [x] `POST` /api/v1/statuses/:status_id/bookmark
-  - [x] `POST` /api/v1/statuses/:status_id/unbookmark
-  - [ ] `GET` /api/v1/statuses/:status_id/favourited_by
-  - [ ] `GET` /api/v1/statuses/:status_id/reblogged_by
-- [x] Timelines
-  - [x] `GET` /api/v1/timelines/home
-  - [x] `GET` /api/v1/timelines/public
-  - [x] `GET` /api/v1/timelines/tag/:hashtag
-- [ ] Notifications
-  - [x] `GET` /api/v1/notifications
-- [ ] Streaming
-  - [ ] `WS` /api/v1/streaming
-- [ ] Search
-  - [ ] `GET` /api/v2/search
-- [ ] Conversations
-  - [ ] `GET` /api/v1/conversations
-- [x] Trends
-  - [x] `GET` /api/v1/trends/statuses
-  - [x] `GET` /api/v1/trends/tags
-- [x] Media
-  - [x] `POST` /api/v1/media
-  - [x] `POST` /api/v2/media
+### Discovery & Auth
+
+- [x] `GET` /.well-known/webfinger
+- [x] `GET` /.well-known/nodeinfo
+- [x] `GET` /.well-known/host-meta
+- [x] `GET` /nodeinfo/2.0
+- [x] `GET` /oauth/authorize
+- [x] `POST` /oauth/token
+- [x] `POST` /api/v1/apps
+- [x] `GET` /api/v1/apps/verify_credentials
+
+### Instance
+
+- [x] `GET` /api/v1/instance
+- [x] `GET` /api/v2/instance
+- [x] `GET` /api/v1/instance/peers
+- [x] `GET` /api/v1/instance/rules
+- [x] `GET` /api/v1/custom_emojis
+
+### Accounts
+
+- [x] `GET` /api/v1/accounts/lookup
+- [x] `GET` /api/v1/accounts/:id
+- [x] `GET` /api/v1/accounts/verify_credentials
+- [x] `GET` /api/v1/accounts/relationships
+- [x] `GET` /api/v1/accounts/:id/following
+- [x] `GET` /api/v1/accounts/:id/followers
+- [x] `GET` /api/v1/accounts/:id/lists
+- [x] `GET` /api/v1/accounts/:id/featured_tags
+- [x] `POST` /api/v1/accounts/:id/follow
+- [x] `POST` /api/v1/accounts/:id/unfollow
+- [x] `POST` /api/v1/accounts/:id/mute
+- [x] `POST` /api/v1/accounts/:id/unmute
+- [x] `GET` /api/v1/follow_requests
+- [x] `POST` /api/v1/follow_requests/:id/authorize
+- [x] `POST` /api/v1/follow_requests/:id/reject
+- [x] `GET` /api/v1/bookmarks
+- [x] `GET` /api/v1/favourites
+
+### Statuses
+
+- [x] `POST` /api/v1/statuses (text, media, polls, reply, visibility, CW)
+- [x] `GET` /api/v1/statuses/:id
+- [x] `GET` /api/v1/statuses/:id/context
+- [x] `POST` /api/v1/statuses/:id/favourite
+- [x] `POST` /api/v1/statuses/:id/unfavourite
+- [x] `POST` /api/v1/statuses/:id/bookmark
+- [x] `POST` /api/v1/statuses/:id/unbookmark
+- [x] `POST` /api/v1/statuses/:id/reblog
+- [x] `POST` /api/v1/statuses/:id/unreblog
+
+### Timelines
+
+- [x] `GET` /api/v1/timelines/home
+- [x] `GET` /api/v1/timelines/public
+- [x] `GET` /api/v1/timelines/tag/:hashtag
+
+### Notifications
+
+- [x] `GET` /api/v1/notifications
+- [x] `GET` /api/v1/notifications/unread_count
+
+### Polls
+
+- [x] `GET` /api/v1/polls/:id
+- [x] `POST` /api/v1/polls/:id/votes
+
+### Search
+
+- [x] `GET` /api/v2/search
+
+### Media
+
+- [x] `POST` /api/v1/media
+- [x] `POST` /api/v2/media
+
+### Trends
+
+- [x] `GET` /api/v1/trends/statuses
+- [x] `GET` /api/v1/trends/tags
+
+### Other
+
+- [x] `GET` /api/v1/announcements
+- [x] `GET` /api/v1/conversations
+- [x] `GET` /api/v1/preferences
+- [x] `GET` /api/v1/markers
+- [x] `POST` /api/v1/markers
+- [x] `GET` /api/v1/suggestions
+- [x] `GET` /api/v2/suggestions
+- [x] `POST` /api/v1/reports
+- [x] `GET` /api/v1/blocks
+- [x] `GET` /api/v1/mutes
+- [x] `GET` /api/v1/lists
+- [x] `GET` /api/v1/domain_blocks
+- [x] `GET` /api/v1/filters
+- [x] `GET` /api/v2/filters
+- [x] `GET` /api/v1/featured_tags
+- [x] `GET` /api/v1/followed_tags
+- [x] `GET` /api/v1/endorsements
+- [x] `GET` /api/v1/scheduled_statuses
+- [ ] `WS` /api/v1/streaming
 
 </details>
 

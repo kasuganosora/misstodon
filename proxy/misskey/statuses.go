@@ -166,9 +166,9 @@ func StatusBookmarks(ctx Context,
 }
 
 // PostNewStatus 发送新的 Status
-// FIXME: Poll 未实现
 func PostNewStatus(ctx Context,
-	status *string, Poll any, MediaIDs []string, InReplyToID string,
+	status *string, pollOptions []string, pollExpiresIn int, pollMultiple bool,
+	MediaIDs []string, InReplyToID string,
 	Sensitive bool, SpoilerText string,
 	Visibility models.StatusVisibility, Language string,
 	ScheduledAt time.Time,
@@ -178,6 +178,16 @@ func PostNewStatus(ctx Context,
 	if status != nil && *status != "" {
 		body["text"] = *status
 		noteMentions = append(noteMentions, utils.GetMentions(*status)...)
+	}
+	if len(pollOptions) >= 2 {
+		poll := utils.Map{
+			"choices":  pollOptions,
+			"multiple": pollMultiple,
+		}
+		if pollExpiresIn > 0 {
+			poll["expiredAfter"] = pollExpiresIn * 1000 // Mastodon sends seconds, Misskey expects ms
+		}
+		body["poll"] = poll
 	}
 	if Sensitive {
 		if SpoilerText != "" {
@@ -227,6 +237,267 @@ func PostNewStatus(ctx Context,
 		return nil, errors.WithStack(err)
 	}
 	return result.CreatedNote.ToStatus(ctx.ProxyServer()), nil
+}
+
+func StatusDelete(ctx Context, id string) error {
+	resp, err := client.R().
+		SetBody(makeBody(ctx, utils.Map{"noteId": id})).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notes/delete"))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusNoContent); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
+}
+
+func StatusReblog(ctx Context, id string) (models.Status, error) {
+	original, err := StatusSingle(ctx, id)
+	if err != nil {
+		return models.Status{}, errors.WithStack(err)
+	}
+	var result struct {
+		CreatedNote models.MkNote `json:"createdNote"`
+	}
+	resp, err := client.R().
+		SetBody(makeBody(ctx, utils.Map{
+			"renoteId":   id,
+			"localOnly":  false,
+			"visibility": "public",
+		})).
+		SetResult(&result).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notes/create"))
+	if err != nil {
+		return models.Status{}, errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusOK); err != nil {
+		return models.Status{}, errors.WithStack(err)
+	}
+	status := result.CreatedNote.ToStatus(ctx.ProxyServer())
+	status.ReBlog = &original
+	status.ReBlogged = true
+	return status, nil
+}
+
+func StatusUnreblog(ctx Context, id string) (models.Status, error) {
+	resp, err := client.R().
+		SetBody(makeBody(ctx, utils.Map{"noteId": id})).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notes/unrenote"))
+	if err != nil {
+		return models.Status{}, errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusNoContent); err != nil {
+		return models.Status{}, errors.WithStack(err)
+	}
+	status, err := StatusSingle(ctx, id)
+	if err != nil {
+		return models.Status{}, errors.WithStack(err)
+	}
+	status.ReBlogged = false
+	return status, nil
+}
+
+func StatusRebloggedBy(ctx Context, id string, limit int, sinceID, maxID string) ([]models.Account, error) {
+	var result []models.MkNote
+	body := makeBody(ctx, utils.Map{"noteId": id, "limit": limit})
+	if sinceID != "" {
+		body["sinceId"] = sinceID
+	}
+	if maxID != "" {
+		body["untilId"] = maxID
+	}
+	resp, err := client.R().
+		SetBody(body).
+		SetResult(&result).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notes/renotes"))
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusOK); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	var accounts []models.Account
+	for _, note := range result {
+		if note.User != nil {
+			if a, err := note.User.ToAccount(ctx.ProxyServer()); err == nil {
+				accounts = append(accounts, a)
+			}
+		}
+	}
+	return accounts, nil
+}
+
+func StatusFavouritedBy(ctx Context, id string, limit int, sinceID, maxID string) ([]models.Account, error) {
+	type reactionResult struct {
+		ID        string        `json:"id"`
+		User      models.MkUser `json:"user"`
+		Type      string        `json:"type"`
+		CreatedAt string        `json:"createdAt"`
+	}
+	var result []reactionResult
+	body := makeBody(ctx, utils.Map{"noteId": id, "limit": limit})
+	if sinceID != "" {
+		body["sinceId"] = sinceID
+	}
+	if maxID != "" {
+		body["untilId"] = maxID
+	}
+	resp, err := client.R().
+		SetBody(body).
+		SetResult(&result).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notes/reactions"))
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusOK); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	var accounts []models.Account
+	for _, r := range result {
+		if a, err := r.User.ToAccount(ctx.ProxyServer()); err == nil {
+			accounts = append(accounts, a)
+		}
+	}
+	return accounts, nil
+}
+
+func StatusContext(ctx Context, id string) (map[string]any, error) {
+	result := map[string]any{
+		"ancestors":   []models.Status{},
+		"descendants": []models.Status{},
+	}
+
+	// Get ancestors via /api/notes/conversation
+	var ancestorNotes []models.MkNote
+	resp, err := client.R().
+		SetBody(makeBody(ctx, utils.Map{"noteId": id, "limit": 40})).
+		SetResult(&ancestorNotes).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notes/conversation"))
+	if err == nil && isucceed(resp, http.StatusOK) == nil {
+		var ancestors []models.Status
+		for _, n := range ancestorNotes {
+			ancestors = append(ancestors, n.ToStatus(ctx.ProxyServer()))
+		}
+		// Reverse to chronological order
+		for i, j := 0, len(ancestors)-1; i < j; i, j = i+1, j-1 {
+			ancestors[i], ancestors[j] = ancestors[j], ancestors[i]
+		}
+		if len(ancestors) > 0 {
+			result["ancestors"] = ancestors
+		}
+	}
+
+	// Get descendants via /api/notes/children
+	var childNotes []models.MkNote
+	resp, err = client.R().
+		SetBody(makeBody(ctx, utils.Map{"noteId": id, "limit": 40})).
+		SetResult(&childNotes).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notes/children"))
+	if err == nil && isucceed(resp, http.StatusOK) == nil {
+		var descendants []models.Status
+		for _, n := range childNotes {
+			descendants = append(descendants, n.ToStatus(ctx.ProxyServer()))
+		}
+		if len(descendants) > 0 {
+			result["descendants"] = descendants
+		}
+	}
+
+	return result, nil
+}
+
+func StatusMuteThread(ctx Context, id string) (models.Status, error) {
+	status, err := StatusSingle(ctx, id)
+	if err != nil {
+		return status, errors.WithStack(err)
+	}
+	resp, err := client.R().
+		SetBody(makeBody(ctx, utils.Map{"noteId": id})).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notes/thread-muting/create"))
+	if err != nil {
+		return status, errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusNoContent, "ALREADY_MUTING"); err != nil {
+		return status, errors.WithStack(err)
+	}
+	status.Muted = true
+	return status, nil
+}
+
+func StatusUnmuteThread(ctx Context, id string) (models.Status, error) {
+	status, err := StatusSingle(ctx, id)
+	if err != nil {
+		return status, errors.WithStack(err)
+	}
+	resp, err := client.R().
+		SetBody(makeBody(ctx, utils.Map{"noteId": id})).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notes/thread-muting/delete"))
+	if err != nil {
+		return status, errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusNoContent, "NOT_MUTING"); err != nil {
+		return status, errors.WithStack(err)
+	}
+	status.Muted = false
+	return status, nil
+}
+
+func StatusPin(ctx Context, id string) (models.Status, error) {
+	status, err := StatusSingle(ctx, id)
+	if err != nil {
+		return status, errors.WithStack(err)
+	}
+	resp, err := client.R().
+		SetBody(makeBody(ctx, utils.Map{"noteId": id})).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/i/pin"))
+	if err != nil {
+		return status, errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusOK, "ALREADY_PINNED"); err != nil {
+		return status, errors.WithStack(err)
+	}
+	return status, nil
+}
+
+func StatusUnpin(ctx Context, id string) (models.Status, error) {
+	status, err := StatusSingle(ctx, id)
+	if err != nil {
+		return status, errors.WithStack(err)
+	}
+	resp, err := client.R().
+		SetBody(makeBody(ctx, utils.Map{"noteId": id})).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/i/unpin"))
+	if err != nil {
+		return status, errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusOK, "NOT_PINNED"); err != nil {
+		return status, errors.WithStack(err)
+	}
+	return status, nil
+}
+
+func StatusTranslate(ctx Context, id, targetLang string) (models.Translation, error) {
+	var result struct {
+		SourceLang string `json:"sourceLang"`
+		Text       string `json:"text"`
+	}
+	body := makeBody(ctx, utils.Map{"noteId": id, "targetLang": targetLang})
+	resp, err := client.R().
+		SetBody(body).
+		SetResult(&result).
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/notes/translate"))
+	if err != nil {
+		return models.Translation{}, errors.WithStack(err)
+	}
+	if err = isucceed(resp, http.StatusOK); err != nil {
+		return models.Translation{}, errors.WithStack(err)
+	}
+	return models.Translation{
+		Content:                result.Text,
+		DetectedSourceLanguage: result.SourceLang,
+		Provider:               "Misskey",
+	}, nil
 }
 
 func SearchStatusByHashtag(ctx Context,

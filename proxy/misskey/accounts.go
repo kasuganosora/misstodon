@@ -91,6 +91,8 @@ func VerifyCredentials(ctx Context) (models.CredentialAccount, error) {
 		info.Source.Note = *result.Description
 	}
 	info.Source.Fields = info.Account.Fields
+	info.Source.Privacy = models.PostPrivacyPublic
+	info.Source.Language = ""
 	return info, nil
 }
 
@@ -153,12 +155,12 @@ func UpdateCredentials(ctx Context,
 	resp, err := client.R().
 		SetBody(body).
 		SetResult(&result).
-		Patch(utils.JoinURL(ctx.ProxyServer(), "/api/i/update"))
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/i/update"))
 	if err != nil {
 		return info, errors.WithStack(err)
 	}
 	if resp.StatusCode() != 200 {
-		return info, errors.New("failed to verify credentials")
+		return info, errors.New("failed to update credentials")
 	}
 	account, err := result.ToAccount(ctx.ProxyServer())
 	if err != nil {
@@ -223,7 +225,7 @@ func AccountFollowRequestsAccept(ctx Context, userID string) error {
 	data := utils.Map{"i": ctx.Token(), "userId": userID}
 	resp, err := client.R().
 		SetBody(data).
-		Post(utils.JoinURL(*ctx.Token(), "/api/following/requests/accept"))
+		Post(utils.JoinURL(ctx.ProxyServer(), "/api/following/requests/accept"))
 	if err != nil {
 		return errors.WithStack(err)
 	}

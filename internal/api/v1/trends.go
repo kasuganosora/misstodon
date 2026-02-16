@@ -4,50 +4,53 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gin-gonic/gin"
+	"github.com/gizmo-ds/misstodon/internal/api/httperror"
 	"github.com/gizmo-ds/misstodon/internal/misstodon"
 	"github.com/gizmo-ds/misstodon/internal/utils"
 	"github.com/gizmo-ds/misstodon/proxy/misskey"
-	"github.com/labstack/echo/v4"
 )
 
-func TrendsRouter(e *echo.Group) {
-	group := e.Group("/trends")
+func TrendsRouter(r *gin.RouterGroup) {
+	group := r.Group("/trends")
 	group.GET("/tags", TrendsTagsHandler)
 	group.GET("/statuses", TrendsStatusHandler)
 }
 
-func TrendsTagsHandler(c echo.Context) error {
+func TrendsTagsHandler(c *gin.Context) {
 	limit := 10
-	if v, err := strconv.Atoi(c.QueryParam("limit")); err == nil {
+	if v, err := strconv.Atoi(c.Query("limit")); err == nil {
 		limit = v
 		if limit > 20 {
 			limit = 20
 		}
 	}
-	offset, _ := strconv.Atoi(c.QueryParam("offset"))
+	offset, _ := strconv.Atoi(c.Query("offset"))
 
-	ctx, _ := misstodon.ContextWithEchoContext(c)
+	ctx, _ := misstodon.ContextWithGinContext(c)
 
 	tags, err := misskey.TrendsTags(ctx, limit, offset)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, utils.SliceIfNull(tags))
+	c.JSON(http.StatusOK, utils.SliceIfNull(tags))
 }
 
-func TrendsStatusHandler(c echo.Context) error {
+func TrendsStatusHandler(c *gin.Context) {
 	limit := 20
-	if v, err := strconv.Atoi(c.QueryParam("limit")); err == nil {
+	if v, err := strconv.Atoi(c.Query("limit")); err == nil {
 		limit = v
 		if limit > 30 {
 			limit = 30
 		}
 	}
-	offset, _ := strconv.Atoi(c.QueryParam("offset"))
-	ctx, _ := misstodon.ContextWithEchoContext(c)
+	offset, _ := strconv.Atoi(c.Query("offset"))
+	ctx, _ := misstodon.ContextWithGinContext(c)
 	statuses, err := misskey.TrendsStatus(ctx, limit, offset)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, utils.SliceIfNull(statuses))
+	c.JSON(http.StatusOK, utils.SliceIfNull(statuses))
 }

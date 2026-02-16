@@ -15,6 +15,7 @@ type MkFile struct {
 	Size         int64   `json:"size"`
 	Md5          string  `json:"md5"`
 	CreatedAt    string  `json:"createdAt"`
+	Comment      *string `json:"comment"`
 	BlurHash     *string `json:"blurhash"`
 	Properties   struct {
 		Width  int `json:"width"`
@@ -30,10 +31,11 @@ type MkFolder struct {
 
 func (f *MkFile) ToMediaAttachment() MediaAttachment {
 	a := MediaAttachment{
-		ID:         f.ID,
-		Url:        f.Url,
-		RemoteUrl:  f.Url,
-		PreviewUrl: f.ThumbnailUrl,
+		ID:          f.ID,
+		Url:         f.Url,
+		RemoteUrl:   f.Url,
+		PreviewUrl:  f.ThumbnailUrl,
+		Description: f.Comment,
 	}
 	a.Meta.Original.Width = f.Properties.Width
 	a.Meta.Original.Height = f.Properties.Height

@@ -3,31 +3,35 @@ package v1
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
+	"github.com/gizmo-ds/misstodon/internal/api/httperror"
 	"github.com/gizmo-ds/misstodon/internal/misstodon"
 	"github.com/gizmo-ds/misstodon/proxy/misskey"
-	"github.com/labstack/echo/v4"
 )
 
-func MediaRouter(e *echo.Group) {
-	group := e.Group("/media")
+func MediaRouter(r *gin.RouterGroup) {
+	group := r.Group("/media")
 	group.POST("", MediaUploadHandler)
 }
 
-func MediaUploadHandler(c echo.Context) error {
+func MediaUploadHandler(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
-	description := c.FormValue("description")
+	description := c.PostForm("description")
 
-	ctx, err := misstodon.ContextWithEchoContext(c, true)
+	ctx, err := misstodon.ContextWithGinContext(c, true)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusUnauthorized, err)
+		return
 	}
 
 	ma, err := misskey.MediaUpload(ctx, file, description)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, ma)
+	c.JSON(http.StatusOK, ma)
 }

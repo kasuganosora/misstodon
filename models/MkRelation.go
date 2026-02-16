@@ -9,17 +9,20 @@ type MkRelation struct {
 	IsBlocking                     bool   `json:"isBlocking"`
 	IsBlocked                      bool   `json:"isBlocked"`
 	IsMuted                        bool   `json:"isMuted"`
+	IsRenoteMuted                  bool   `json:"isRenoteMuted"`
 }
 
 func (r MkRelation) ToRelationship() Relationship {
 	return Relationship{
-		ID:         r.ID,
-		Following:  r.IsFollowing,
-		FollowedBy: r.IsFollowed,
-		Requested:  r.HasPendingFollowRequestFromYou,
-		Languages:  []string{},
-		Blocking:   r.IsBlocking,
-		BlockedBy:  r.IsBlocked,
-		Muting:     r.IsMuted,
+		ID:             r.ID,
+		Following:      r.IsFollowing,
+		ShowingReblogs: !r.IsRenoteMuted,
+		FollowedBy:     r.IsFollowed,
+		Requested:      r.HasPendingFollowRequestFromYou,
+		RequestedBy:    r.HasPendingFollowRequestToYou,
+		Languages:      []string{},
+		Blocking:       r.IsBlocking,
+		BlockedBy:      r.IsBlocked,
+		Muting:         r.IsMuted,
 	}
 }

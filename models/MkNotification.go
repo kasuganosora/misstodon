@@ -12,6 +12,8 @@ const (
 	MkNotificationTypeReceiveRenote         MkNotificationType = "renote"
 	MkNotificationTypeReply                 MkNotificationType = "reply"
 	MkNotificationTypeMention               MkNotificationType = "mention"
+	MkNotificationTypePollEnded             MkNotificationType = "pollEnded"
+	MkNotificationTypeQuote                 MkNotificationType = "quote"
 
 	MkNotificationTypeUnknown MkNotificationType = "unknown"
 )
@@ -65,6 +67,10 @@ func (t MkNotificationType) ToNotificationType() NotificationType {
 	case MkNotificationTypeReceiveRenote:
 		return NotificationTypeReblog
 	case MkNotificationTypeReply, MkNotificationTypeMention:
+		return NotificationTypeMention
+	case MkNotificationTypePollEnded:
+		return NotificationTypePoll
+	case MkNotificationTypeQuote:
 		return NotificationTypeMention
 	default:
 		return NotificationTypeUnknown

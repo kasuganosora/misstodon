@@ -12,12 +12,9 @@ PLATFORMS := linux windows darwin
 
 all: build-all
 
-generate:
-	go generate ./...
-
 build-all: $(PLATFORMS)
 
-$(PLATFORMS): generate
+$(PLATFORMS):
 	GOOS=$@ GOARCH=amd64 go build $(FLAGS) -o $(OUTDIR)/$(NAME)-$@-amd64$(if $(filter windows,$@),.exe) $(MAIN)
 
 sha256sum:
@@ -32,8 +29,13 @@ zip:
 clean:
 	rm -rf $(OUTDIR)/*
 
-build-image: generate
-	docker build --no-cache --build-arg version=$(shell git describe --tags --always) -t ghcr.io/gizmo-ds/misstodon:latest -f Dockerfile .
+test:
+	go test ./... -v
 
-build-develop-image: generate
-	docker build --no-cache --build-arg version=$(shell git describe --tags --always) -t ghcr.io/gizmo-ds/misstodon:develop -f Dockerfile .
+build-image:
+	docker build --no-cache --build-arg version=$(VERSION) -t ghcr.io/gizmo-ds/misstodon:latest -f Dockerfile .
+
+build-develop-image:
+	docker build --no-cache --build-arg version=$(VERSION) -t ghcr.io/gizmo-ds/misstodon:develop -f Dockerfile .
+
+.PHONY: all build-all $(PLATFORMS) sha256sum zip clean test build-image build-develop-image

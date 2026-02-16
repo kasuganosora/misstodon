@@ -32,11 +32,15 @@ func driveFileCreate(ctx Context, filename string, content io.Reader) (models.Mk
 		saveFolder = &folder
 	}
 
+	token := ctx.Token()
+	if token == nil {
+		return file, errors.New("authentication required")
+	}
 	resp, err := client.R().
 		SetFormData(map[string]string{
 			"folderId":    saveFolder.Id,
 			"name":        filename,
-			"i":           *ctx.Token(),
+			"i":           *token,
 			"force":       "true",
 			"isSensitive": "false",
 		}).
@@ -47,7 +51,7 @@ func driveFileCreate(ctx Context, filename string, content io.Reader) (models.Mk
 		return file, err
 	}
 	if resp.StatusCode() != 200 {
-		return file, errors.New("failed to verify credentials")
+		return file, errors.New("failed to create drive file")
 	}
 	return file, nil
 }
@@ -61,7 +65,7 @@ func driveFolders(ctx Context) (folders []models.MkFolder, err error) {
 		return
 	}
 	if resp.StatusCode() != 200 {
-		return folders, errors.New("failed to verify credentials")
+		return folders, errors.New("failed to list drive folders")
 	}
 	return
 }
@@ -76,7 +80,7 @@ func driveFolderCreate(ctx Context, name string) (models.MkFolder, error) {
 		return folder, err
 	}
 	if resp.StatusCode() != 200 {
-		return folder, errors.New("failed to verify credentials")
+		return folder, errors.New("failed to create drive folder")
 	}
 	return folder, nil
 }

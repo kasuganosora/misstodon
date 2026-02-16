@@ -11,7 +11,7 @@ func TestInstance(t *testing.T) {
 	if testServer == "" {
 		t.Skip("TEST_SERVER is required")
 	}
-	info, err := misskey.Instance(testServer, "development")
+	info, err := misskey.Instance(testServer, "development", "")
 	assert.NoError(t, err)
 	assert.Equal(t, testServer, info.Uri)
 }

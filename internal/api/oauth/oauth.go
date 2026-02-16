@@ -6,26 +6,28 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/gizmo-ds/misstodon/internal/api/httperror"
 	"github.com/gizmo-ds/misstodon/internal/api/middleware"
-	"github.com/gizmo-ds/misstodon/internal/global"
 	"github.com/gizmo-ds/misstodon/proxy/misskey"
-	"github.com/labstack/echo/v4"
 )
 
-func Router(e *echo.Group) {
-	group := e.Group("/oauth", middleware.CORS())
+func Router(r *gin.RouterGroup) {
+	group := r.Group("/oauth")
+	group.Use(middleware.CORS())
 	group.GET("/authorize", AuthorizeHandler)
 	group.POST("/token", TokenHandler)
 	// NOTE: This is not a standard endpoint
 	group.GET("/redirect", RedirectHandler)
 }
 
-func RedirectHandler(c echo.Context) error {
-	redirectUris := c.QueryParam("redirect_uris")
-	server := c.QueryParam("server")
-	token := c.QueryParam("token")
+func RedirectHandler(c *gin.Context) {
+	redirectUris := c.Query("redirect_uris")
+	server := c.Query("server")
+	token := c.Query("token")
 	if redirectUris == "" || server == "" {
-		return c.String(http.StatusBadRequest, "redirect_uris and server are required")
+		c.String(http.StatusBadRequest, "redirect_uris and server are required")
+		return
 	}
 	if token == "" {
 		if strings.Contains(redirectUris, "?token=") {
@@ -41,15 +43,16 @@ func RedirectHandler(c echo.Context) error {
 	}
 	u, err := url.Parse(redirectUris)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
 	query := u.Query()
 	query.Add("code", token)
 	u.RawQuery = query.Encode()
-	return c.Redirect(http.StatusFound, u.String())
+	c.Redirect(http.StatusFound, u.String())
 }
 
-func TokenHandler(c echo.Context) error {
+func TokenHandler(c *gin.Context) {
 	var params struct {
 		GrantType    string `json:"grant_type" form:"grant_type"`
 		ClientID     string `json:"client_id" form:"client_id"`
@@ -58,23 +61,26 @@ func TokenHandler(c echo.Context) error {
 		Code         string `json:"code" form:"code"`
 		Scope        string `json:"scope" form:"scope"`
 	}
-	if err := c.Bind(&params); err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{
+	if err := c.ShouldBind(&params); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
+		return
 	}
 	if params.GrantType == "" || params.ClientID == "" ||
 		params.ClientSecret == "" || params.RedirectURI == "" {
-		return c.JSON(http.StatusBadRequest, echo.Map{
+		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "grant_type, client_id, client_secret and redirect_uri are required",
 		})
+		return
 	}
-	server := c.Get("proxy-server").(string)
+	server := c.GetString("proxy-server")
 	accessToken, userID, err := misskey.OAuthToken(server, params.Code, params.ClientSecret)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.JSON(http.StatusOK, echo.Map{
+	c.JSON(http.StatusOK, gin.H{
 		"access_token": strings.Join([]string{userID, accessToken}, "."),
 		"token_type":   "Bearer",
 		"scope":        params.Scope,
@@ -82,40 +88,47 @@ func TokenHandler(c echo.Context) error {
 	})
 }
 
-func AuthorizeHandler(c echo.Context) error {
+func AuthorizeHandler(c *gin.Context) {
 	var params struct {
-		ClientID     string `query:"client_id"`
-		RedirectUri  string `query:"redirect_uri"`
-		ResponseType string `query:"response_type"`
-		Scope        string `query:"scope"`
-		Lang         string `query:"lang"`
-		ForceLogin   bool   `query:"force_login"`
+		ClientID     string `form:"client_id"`
+		RedirectUri  string `form:"redirect_uri"`
+		ResponseType string `form:"response_type"`
+		Scope        string `form:"scope"`
+		Lang         string `form:"lang"`
+		ForceLogin   bool   `form:"force_login"`
 	}
-	if err := c.Bind(&params); err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{
+	if err := c.ShouldBindQuery(&params); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
+		return
 	}
 	if params.ResponseType != "code" {
-		return c.JSON(http.StatusBadRequest, echo.Map{
+		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "response_type must be code",
 		})
+		return
 	}
 	if params.ClientID == "" || params.RedirectUri == "" || params.ResponseType == "" {
-		return c.JSON(http.StatusBadRequest, echo.Map{
+		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "client_id, redirect_uri and response_type are required",
 		})
+		return
 	}
-	server := c.Get("proxy-server").(string)
-	secret, ok := global.DB.Get(server, params.ClientID)
-	if !ok {
-		return c.JSON(http.StatusBadRequest, echo.Map{
+	// Extract the secret from the encoded client_id (format: "realId.secret")
+	dotIndex := strings.Index(params.ClientID, ".")
+	if dotIndex < 0 || dotIndex >= len(params.ClientID)-1 {
+		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "client_id is invalid",
 		})
+		return
 	}
+	secret := params.ClientID[dotIndex+1:]
+	server := c.GetString("proxy-server")
 	u, err := misskey.OAuthAuthorize(server, secret)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
-	return c.Redirect(http.StatusFound, u)
+	c.Redirect(http.StatusFound, u)
 }

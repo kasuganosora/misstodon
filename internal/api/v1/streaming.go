@@ -4,10 +4,11 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
+	"github.com/gizmo-ds/misstodon/internal/api/httperror"
 	"github.com/gizmo-ds/misstodon/models"
 	"github.com/gizmo-ds/misstodon/proxy/misskey/streaming"
 	"github.com/gorilla/websocket"
-	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -15,28 +16,28 @@ import (
 var wsUpgrade = websocket.Upgrader{
 	ReadBufferSize:  4096, // we don't expect reads
 	WriteBufferSize: 4096,
-	NegotiateSubprotocol: func(r *http.Request) (string, error) {
-		return r.Header.Get("Sec-Websocket-Protocol"), nil
-	},
+	Subprotocols:    []string{},
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-func StreamingRouter(e *echo.Group) {
-	e.GET("/streaming", StreamingHandler)
+func StreamingRouter(r *gin.RouterGroup) {
+	r.GET("/streaming", StreamingHandler)
 }
 
-func StreamingHandler(c echo.Context) error {
+func StreamingHandler(c *gin.Context) {
 	var token string
-	if token = c.QueryParam("access_token"); token == "" {
-		if token = c.Request().Header.Get("Sec-Websocket-Protocol"); token == "" {
-			return errors.New("no access token provided")
+	if token = c.Query("access_token"); token == "" {
+		if token = c.Request.Header.Get("Sec-Websocket-Protocol"); token == "" {
+			httperror.AbortWithError(c, http.StatusBadRequest, errors.New("no access token provided"))
+			return
 		}
 	}
-	server := c.Get("proxy-server").(string)
+	server := c.GetString("proxy-server")
 
-	conn, err := wsUpgrade.Upgrade(c.Response(), c.Request(), nil)
+	conn, err := wsUpgrade.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		return err
+		httperror.AbortWithError(c, http.StatusInternalServerError, err)
+		return
 	}
 	defer conn.Close()
 
@@ -66,16 +67,17 @@ func StreamingHandler(c echo.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		default:
 		}
 		_, _, err = conn.ReadMessage()
 		if err != nil {
 			if _, ok := err.(*websocket.CloseError); ok {
 				cancel()
-				return nil
+				return
 			}
-			return err
+			httperror.AbortWithError(c, http.StatusInternalServerError, err)
+			return
 		}
 	}
 }

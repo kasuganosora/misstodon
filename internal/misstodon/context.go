@@ -6,32 +6,32 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gizmo-ds/misstodon/internal/utils"
-	"github.com/labstack/echo/v4"
 )
 
 type Context struct {
 	m sync.Map
 }
 
-func ContextWithEchoContext(eCtx echo.Context, tokenRequired ...bool) (*Context, error) {
+func ContextWithGinContext(gCtx *gin.Context, tokenRequired ...bool) (*Context, error) {
 	c := &Context{}
-	if server, ok := eCtx.Get("proxy-server").(string); ok {
-		c.SetProxyServer(server)
+	if server, ok := gCtx.Get("proxy-server"); ok {
+		c.SetProxyServer(server.(string))
 	}
 	if len(tokenRequired) > 0 && tokenRequired[0] {
-		token, err := utils.GetHeaderToken(eCtx.Request().Header)
+		token, err := utils.GetHeaderToken(gCtx.Request.Header)
 		if err != nil && (len(tokenRequired) > 0 && tokenRequired[0]) {
-			return nil, echo.NewHTTPError(http.StatusUnauthorized, "the access token is invalid")
+			return nil, gin.Error{Err: err, Type: gin.ErrorTypePublic, Meta: gin.H{"code": http.StatusUnauthorized, "message": "the access token is invalid"}}
 		}
 		arr := strings.Split(token, ".")
 		if len(arr) < 2 {
-			return nil, echo.NewHTTPError(http.StatusUnauthorized, "the access token is invalid")
+			return nil, gin.Error{Err: err, Type: gin.ErrorTypePublic, Meta: gin.H{"code": http.StatusUnauthorized, "message": "the access token is invalid"}}
 		}
 		c.SetUserID(arr[0])
 		c.SetToken(arr[1])
 	}
-	c.SetHOST(eCtx.Request().Host)
+	c.SetHOST(gCtx.Request.Host)
 	return c, nil
 }
 
@@ -74,7 +74,10 @@ func (c *Context) String(key string) *string {
 }
 
 func (c *Context) ProxyServer() string {
-	return *c.String("proxy-server")
+	if s := c.String("proxy-server"); s != nil {
+		return *s
+	}
+	return ""
 }
 
 func (c *Context) SetProxyServer(val string) {

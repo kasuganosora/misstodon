@@ -7,7 +7,7 @@ const (
 	NotificationTypeStatus        NotificationType = "status"
 	NotificationTypeReblog        NotificationType = "reblog"
 	NotificationTypeFollow        NotificationType = "follow"
-	NotificationTypeFollowRequest NotificationType = "follow_request "
+	NotificationTypeFollowRequest NotificationType = "follow_request"
 	NotificationTypeFavourite     NotificationType = "favourite"
 	NotificationTypePoll          NotificationType = "poll"
 	NotificationTypeUpdate        NotificationType = "update"
@@ -34,13 +34,15 @@ func (t NotificationType) ToMkNotificationType() MkNotificationType {
 	case NotificationTypeFollow:
 		return MkNotificationTypeFollow
 	case NotificationTypeFollowRequest:
-		return MkNotificationTypeReceiveReaction
+		return MkNotificationTypeReceiveFollowRequest
 	case NotificationTypeFavourite:
 		return MkNotificationTypeReceiveReaction
 	case NotificationTypeReblog:
 		return MkNotificationTypeReceiveRenote
 	case NotificationTypeMention:
 		return MkNotificationTypeMention
+	case NotificationTypePoll:
+		return MkNotificationTypePollEnded
 	default:
 		return MkNotificationTypeUnknown
 	}
