@@ -55,13 +55,25 @@ type (
 		} `json:"thumbnail"`
 		Languages     []string       `json:"languages"`
 		Configuration struct {
+			Urls struct {
+				Streaming string `json:"streaming,omitempty"`
+			} `json:"urls,omitempty"`
+			Accounts struct {
+				MaxFeaturedTags    int `json:"max_featured_tags"`
+				MaxPinnedStatuses int `json:"max_pinned_statuses"`
+			} `json:"accounts"`
 			Statuses struct {
 				MaxCharacters            int `json:"max_characters"`
 				MaxMediaAttachments      int `json:"max_media_attachments"`
 				CharactersReservedPerUrl int `json:"characters_reserved_per_url"`
 			} `json:"statuses"`
 			MediaAttachments struct {
-				SupportedMimeTypes []string `json:"supported_mime_types"`
+				SupportedMimeTypes  []string `json:"supported_mime_types"`
+				ImageSizeLimit      int      `json:"image_size_limit"`
+				ImageMatrixLimit    int      `json:"image_matrix_limit"`
+				VideoSizeLimit      int      `json:"video_size_limit"`
+				VideoFrameRateLimit int      `json:"video_frame_rate_limit"`
+				VideoMatrixLimit    int      `json:"video_matrix_limit"`
 			} `json:"media_attachments"`
 			Polls struct {
 				MaxOptions             int `json:"max_options"`
@@ -78,6 +90,9 @@ type (
 			ApprovalRequired bool    `json:"approval_required"`
 			Message          *string `json:"message"`
 		} `json:"registrations"`
+		ApiVersions struct {
+			Mastodon int `json:"mastodon"`
+		} `json:"api_versions"`
 		Contact struct {
 			Email   string   `json:"email"`
 			Account *Account `json:"account"`
