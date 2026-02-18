@@ -49,7 +49,7 @@ type MkMeta struct {
 		NoteEachClipsLimit     int  `json:"noteEachClipsLimit"`
 		UserListLimit          int  `json:"userListLimit"`
 		UserEachUserListsLimit int  `json:"userEachUserListsLimit"`
-		RateLimitFactor        int  `json:"rateLimitFactor"`
+		RateLimitFactor        float64  `json:"rateLimitFactor"`
 	} `json:"policies"`
 	PinnedPages      []string `json:"pinnedPages"`
 	PinnedClipID     any      `json:"pinnedClipId"`
