@@ -46,5 +46,7 @@ func WebFingerHandler(c *gin.Context) {
 }
 
 func HostMeta(c *gin.Context) {
-	misskey.HostMeta(c.GetString("proxy-server"), c.Writer)
+	proxyHost := c.Request.Host
+	c.Header("Content-Type", "application/xrd+xml; charset=utf-8")
+	c.String(http.StatusOK, misskey.HostMetaXML(proxyHost))
 }

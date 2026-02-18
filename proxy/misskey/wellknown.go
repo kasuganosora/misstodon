@@ -1,8 +1,10 @@
 package misskey
 
 import (
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/gizmo-ds/misstodon/internal/utils"
 	"github.com/gizmo-ds/misstodon/models"
@@ -45,8 +47,27 @@ func HostMeta(server string, writer http.ResponseWriter) error {
 		return err
 	}
 	defer resp.RawBody().Close()
+
+	// Read body and replace server URL with proxy host
+	body, err := io.ReadAll(resp.RawBody())
+	if err != nil {
+		return err
+	}
+
+	// Replace the Misskey server URL with proxy server URL
+	result := strings.ReplaceAll(string(body), server, "")
+
 	writer.Header().Set("Content-Type", resp.Header().Get("Content-Type"))
 	writer.WriteHeader(resp.StatusCode())
-	_, err = io.Copy(writer, resp.RawBody())
+	_, err = writer.Write([]byte(result))
 	return err
+}
+
+// HostMetaXML returns a properly formatted host-meta XML with the proxy host
+func HostMetaXML(proxyHost string) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0">
+  <Link rel="lrdd" template="https://%s/.well-known/webfinger?resource={uri}"/>
+</XRD>
+`, proxyHost)
 }
