@@ -1,6 +1,7 @@
 package misskey
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -48,6 +49,7 @@ func Instance(server, version, proxyHost string) (models.Instance, error) {
 	var info models.Instance
 	var serverInfo models.MkMeta
 	apiURL := utils.JoinURL(server, "/api/meta")
+	fmt.Printf("[DEBUG] Instance: server=%s, apiURL=%s\n", server, apiURL)
 	resp, err := client.R().
 		SetBody(map[string]any{
 			"detail": false,
@@ -55,9 +57,11 @@ func Instance(server, version, proxyHost string) (models.Instance, error) {
 		SetResult(&serverInfo).
 		Post(apiURL)
 	if err != nil {
+		fmt.Printf("[DEBUG] /api/meta error: %v\n", err)
 		log.Error().Err(err).Str("server", server).Str("url", apiURL).Msg("Failed to call /api/meta")
 		return info, err
 	}
+	fmt.Printf("[DEBUG] /api/meta status: %d, body: %s\n", resp.StatusCode(), string(resp.Body()))
 	serverUrl, err := url.Parse(serverInfo.URI)
 	if err != nil {
 		log.Error().Err(err).Str("uri", serverInfo.URI).Msg("Failed to parse server URI")

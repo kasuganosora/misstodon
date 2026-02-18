@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -16,8 +17,10 @@ func InstanceRouter(r *gin.RouterGroup) {
 
 func InstanceV2Handler(c *gin.Context) {
 	server := c.GetString("proxy-server")
+	fmt.Printf("[DEBUG] InstanceV2Handler called, server=%s\n", server)
 	info, err := misskey.Instance(server, global.AppVersion, c.Request.Host)
 	if err != nil {
+		fmt.Printf("[DEBUG] Instance error: %v\n", err)
 		httperror.AbortWithError(c, http.StatusInternalServerError, err)
 		return
 	}
