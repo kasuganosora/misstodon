@@ -98,7 +98,17 @@ func Instance(server, version, proxyHost string) (models.Instance, error) {
 	info.Configuration.Statuses.MaxMediaAttachments = 4
 	// NOTE: misskey没有相关设置, 此处返回固定值
 	info.Configuration.Statuses.CharactersReservedPerUrl = 23
+	info.Configuration.Accounts.MaxFeaturedTags = 10
 	info.Configuration.MediaAttachments.SupportedMimeTypes = SupportedMimeTypes
+	info.Configuration.MediaAttachments.ImageSizeLimit = 10485760
+	info.Configuration.MediaAttachments.ImageMatrixLimit = 16777216
+	info.Configuration.MediaAttachments.VideoSizeLimit = 41943040
+	info.Configuration.MediaAttachments.VideoFrameRateLimit = 60
+	info.Configuration.MediaAttachments.VideoMatrixLimit = 2304000
+	info.Configuration.Polls.MaxOptions = 10
+	info.Configuration.Polls.MaxCharactersPerOption = 50
+	info.Configuration.Polls.MinExpiration = 300
+	info.Configuration.Polls.MaxExpiration = 2629746
 
 	var serverStats models.MkStats
 	statsURL := utils.JoinURL(server, "/api/stats")
