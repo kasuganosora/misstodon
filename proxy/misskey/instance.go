@@ -7,6 +7,7 @@ import (
 	"github.com/gizmo-ds/misstodon/internal/utils"
 	"github.com/gizmo-ds/misstodon/models"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 	"github.com/samber/lo"
 )
 
@@ -46,20 +47,24 @@ var SupportedMimeTypes = []string{
 func Instance(server, version, proxyHost string) (models.Instance, error) {
 	var info models.Instance
 	var serverInfo models.MkMeta
+	apiURL := utils.JoinURL(server, "/api/meta")
 	resp, err := client.R().
 		SetBody(map[string]any{
 			"detail": false,
 		}).
 		SetResult(&serverInfo).
-		Post(utils.JoinURL(server, "/api/meta"))
+		Post(apiURL)
 	if err != nil {
+		log.Error().Err(err).Str("server", server).Str("url", apiURL).Msg("Failed to call /api/meta")
 		return info, err
 	}
 	serverUrl, err := url.Parse(serverInfo.URI)
 	if err != nil {
+		log.Error().Err(err).Str("uri", serverInfo.URI).Msg("Failed to parse server URI")
 		return info, err
 	}
 	if resp.StatusCode() != http.StatusOK {
+		log.Error().Int("status", resp.StatusCode()).Str("body", string(resp.Body())).Msg("Non-OK response from /api/meta")
 		return info, errors.New("Failed to get instance info")
 	}
 	domain := serverUrl.Host
@@ -92,14 +97,17 @@ func Instance(server, version, proxyHost string) (models.Instance, error) {
 	info.Configuration.MediaAttachments.SupportedMimeTypes = SupportedMimeTypes
 
 	var serverStats models.MkStats
+	statsURL := utils.JoinURL(server, "/api/stats")
 	resp, err = client.R().
 		SetBody(map[string]any{}).
 		SetResult(&serverStats).
-		Post(utils.JoinURL(server, "/api/stats"))
+		Post(statsURL)
 	if err != nil {
+		log.Error().Err(err).Str("url", statsURL).Msg("Failed to call /api/stats")
 		return info, err
 	}
 	if resp.StatusCode() != http.StatusOK {
+		log.Error().Int("status", resp.StatusCode()).Str("body", string(resp.Body())).Msg("Non-OK response from /api/stats")
 		return info, errors.New("Failed to get instance info")
 	}
 	info.Stats.UserCount = serverStats.OriginalUsersCount
