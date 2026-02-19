@@ -57,6 +57,9 @@ type (
 		Src  string `json:"src"`
 		Size string `json:"size"`
 	}
+	VapidConfig struct {
+		PublicKey string `json:"public_key,omitempty"`
+	}
 	InstanceV2 struct {
 		Domain        string   `json:"domain"`
 		Title         string   `json:"title"`
@@ -77,9 +80,7 @@ type (
 			Urls struct {
 				Streaming string `json:"streaming"`
 			} `json:"urls"`
-			Vapid struct {
-				PublicKey string `json:"public_key,omitempty"`
-			} `json:"vapid,omitempty"`
+			Vapid             *VapidConfig `json:"vapid,omitempty"`
 			Accounts struct {
 				MaxFeaturedTags    int `json:"max_featured_tags"`
 				MaxPinnedStatuses int `json:"max_pinned_statuses"`

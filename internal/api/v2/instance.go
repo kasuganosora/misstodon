@@ -35,6 +35,8 @@ func InstanceV2Handler(c *gin.Context) {
 	}
 	v2.Usage.Users.ActiveMonth = info.Stats.UserCount
 	v2.Thumbnail.URL = info.Thumbnail
+	// Icon should be empty array, not null
+	v2.Icon = []models.InstanceIcon{}
 	// Streaming URL - important for client compatibility
 	v2.Configuration.Urls.Streaming = "wss://" + proxyHost + "/api/v1/streaming"
 	if langs, ok := info.Languages.([]string); ok {
