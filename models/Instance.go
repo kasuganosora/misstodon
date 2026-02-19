@@ -43,7 +43,7 @@ type (
 				MaxExpiration          int `json:"max_expiration"`
 			} `json:"polls"`
 		} `json:"configuration"`
-		ContactAccount Account        `json:"contact_account"`
+		ContactAccount *Account       `json:"contact_account"`
 		Rules          []InstanceRule `json:"rules"`
 	}
 	InstanceUrls struct {

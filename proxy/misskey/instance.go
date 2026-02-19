@@ -87,6 +87,7 @@ func Instance(server, version, proxyHost string) (models.Instance, error) {
 		InvitesEnabled:   serverInfo.Policies.CanInvite,
 		Rules:            []models.InstanceRule{},
 		Languages:        serverInfo.Langs,
+		ContactAccount:   nil,
 	}
 	// Set streaming API URL
 	if proxyHost != "" {
