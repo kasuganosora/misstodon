@@ -112,6 +112,7 @@ type (
 			Enabled          bool    `json:"enabled"`
 			ApprovalRequired bool    `json:"approval_required"`
 			Message          *string `json:"message"`
+			Url              *string `json:"url"`
 		} `json:"registrations"`
 		ApiVersions struct {
 			Mastodon int `json:"mastodon"`
