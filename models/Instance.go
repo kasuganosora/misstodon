@@ -53,6 +53,10 @@ type (
 		ID   string `json:"id"`
 		Text string `json:"text"`
 	}
+	InstanceIcon struct {
+		Src  string `json:"src"`
+		Size string `json:"size"`
+	}
 	InstanceV2 struct {
 		Domain        string   `json:"domain"`
 		Title         string   `json:"title"`
@@ -67,11 +71,15 @@ type (
 		Thumbnail struct {
 			URL string `json:"url"`
 		} `json:"thumbnail"`
-		Languages     []string       `json:"languages"`
+		Icon        []InstanceIcon `json:"icon"`
+		Languages   []string       `json:"languages"`
 		Configuration struct {
 			Urls struct {
-				Streaming string `json:"streaming,omitempty"`
-			} `json:"urls,omitempty"`
+				Streaming string `json:"streaming"`
+			} `json:"urls"`
+			Vapid struct {
+				PublicKey string `json:"public_key,omitempty"`
+			} `json:"vapid,omitempty"`
 			Accounts struct {
 				MaxFeaturedTags    int `json:"max_featured_tags"`
 				MaxPinnedStatuses int `json:"max_pinned_statuses"`

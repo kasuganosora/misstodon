@@ -88,8 +88,10 @@ func Instance(server, version, proxyHost string) (models.Instance, error) {
 		Rules:            []models.InstanceRule{},
 		Languages:        serverInfo.Langs,
 	}
-	// TODO: 需要先实现 `/streaming`
-	// info.Urls.StreamingApi = serverInfo.StreamingAPI
+	// Set streaming API URL
+	if proxyHost != "" {
+		info.Urls.StreamingApi = "wss://" + proxyHost + "/api/v1/streaming"
+	}
 	if info.Languages == nil {
 		info.Languages = []string{}
 	}

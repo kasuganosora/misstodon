@@ -1,0 +1,11 @@
+[proxy]
+fallback_server = "maid.lat"
+
+[server]
+bind_address = ":3012"
+
+[logger]
+level = 0
+console_writer = true
+request_logger = false
+filename = "logs/test.jsonl"

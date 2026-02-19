@@ -24,6 +24,8 @@ func InstanceV2Handler(c *gin.Context) {
 		httperror.AbortWithError(c, http.StatusInternalServerError, err)
 		return
 	}
+
+	proxyHost := c.Request.Host
 	v2 := models.InstanceV2{
 		Domain:      info.Uri,
 		Title:       info.Title,
@@ -33,6 +35,8 @@ func InstanceV2Handler(c *gin.Context) {
 	}
 	v2.Usage.Users.ActiveMonth = info.Stats.UserCount
 	v2.Thumbnail.URL = info.Thumbnail
+	// Streaming URL - important for client compatibility
+	v2.Configuration.Urls.Streaming = "wss://" + proxyHost + "/api/v1/streaming"
 	if langs, ok := info.Languages.([]string); ok {
 		v2.Languages = langs
 	} else {
