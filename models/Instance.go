@@ -72,7 +72,9 @@ type (
 			} `json:"users"`
 		} `json:"usage"`
 		Thumbnail struct {
-			URL string `json:"url"`
+			URL      string            `json:"url"`
+			Blurhash string            `json:"blurhash,omitempty"`
+			Versions map[string]string `json:"versions,omitempty"`
 		} `json:"thumbnail"`
 		Icon        []InstanceIcon `json:"icon"`
 		Languages   []string       `json:"languages"`

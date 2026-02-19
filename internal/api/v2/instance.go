@@ -35,6 +35,11 @@ func InstanceV2Handler(c *gin.Context) {
 	}
 	v2.Usage.Users.ActiveMonth = info.Stats.UserCount
 	v2.Thumbnail.URL = info.Thumbnail
+	v2.Thumbnail.Blurhash = ""
+	v2.Thumbnail.Versions = map[string]string{
+		"@1x": info.Thumbnail,
+		"@2x": info.Thumbnail,
+	}
 	// Icon - empty array for now
 	v2.Icon = []models.InstanceIcon{}
 	// Streaming URL
