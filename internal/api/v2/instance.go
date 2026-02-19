@@ -70,8 +70,32 @@ func InstanceV2Handler(c *gin.Context) {
 	v2.Registrations.ApprovalRequired = false
 	// API Versions
 	v2.ApiVersions.Mastodon = 2
-	// Contact
+	// Contact - must have a valid account object
 	v2.Contact.Email = info.Email
+	v2.Contact.Account = &models.Account{
+		ID:             "1",
+		Username:       "admin",
+		Acct:           "admin",
+		DisplayName:    "Admin",
+		Locked:         false,
+		Bot:            false,
+		Discoverable:   true,
+		Indexable:      true,
+		Group:          false,
+		CreatedAt:      "2020-01-01T00:00:00.000Z",
+		Note:           "",
+		Url:            "https://" + proxyHost + "/@admin",
+		Uri:            "https://" + proxyHost + "/users/admin",
+		Avatar:         "",
+		AvatarStatic:   "",
+		Header:         "",
+		HeaderStatic:   "",
+		FollowersCount: 0,
+		FollowingCount: 0,
+		StatusesCount:  0,
+		Emojis:         []models.CustomEmoji{},
+		Fields:         []models.AccountField{},
+	}
 	v2.Rules = info.Rules
 	if v2.Rules == nil {
 		v2.Rules = []models.InstanceRule{}

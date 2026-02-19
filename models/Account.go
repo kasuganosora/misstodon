@@ -21,10 +21,12 @@ type Account struct {
 	Locked         bool           `json:"locked"`
 	Bot            bool           `json:"bot"`
 	Discoverable   bool           `json:"discoverable"`
+	Indexable      bool           `json:"indexable"`
 	Group          bool           `json:"group"`
 	CreatedAt      string         `json:"created_at"`
 	Note           string         `json:"note"`
 	Url            string         `json:"url"`
+	Uri            string         `json:"uri"`
 	Avatar         string         `json:"avatar"`
 	AvatarStatic   string         `json:"avatar_static"`
 	Header         string         `json:"header"`
